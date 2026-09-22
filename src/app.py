@@ -7,15 +7,29 @@ import os
 import secrets
 from werkzeug.utils import secure_filename
 
+import auth
 import db
 
 app = Flask(__name__)
-# A generated key means flash messages and CSRF tokens do not outlive a
-# restart, which is fine for a local single-user app. Set PRIMS_SECRET_KEY to
-# keep them across restarts; never ship a committed, guessable default, since
-# a known key makes the signed session cookie -- and the CSRF token in it --
-# forgeable.
-app.config['SECRET_KEY'] = os.environ.get('PRIMS_SECRET_KEY') or secrets.token_hex(32)
+
+
+def _load_signing_key():
+    """The key that signs the session cookie, preferring the stored one.
+
+    A generated key does not outlive the process, so every restart would
+    invalidate the phone's session and ask for the password again -- which is
+    the failure R4 exists to prevent. The stored key (U1) is therefore the
+    first choice. Falling back to a generated one keeps a fresh checkout
+    runnable on loopback; refusing to start unconfigured is the entry point's
+    job (U5), because the bind host is not known here at import time.
+    """
+    stored = auth.load_secrets(app.instance_path)
+    if stored and stored.get('secret_key'):
+        return stored['secret_key']
+    return os.environ.get('PRIMS_SECRET_KEY') or secrets.token_hex(32)
+
+
+app.config['SECRET_KEY'] = _load_signing_key()
 
 # Configure upload folder
 UPLOAD_FOLDER = 'uploads'
