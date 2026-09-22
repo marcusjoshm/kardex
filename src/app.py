@@ -5,6 +5,9 @@ from flask import (
 import hmac
 import os
 import secrets
+import socket
+import time
+from datetime import timedelta
 from werkzeug.utils import secure_filename
 
 import auth
@@ -50,16 +53,21 @@ def allowed_file(filename):
 # Only the page routes that change state. The JSON API (/inventory,
 # /categories, /locations, /upload, /files/...) is deliberately absent: it is a
 # scriptable local API driven by curl with no cookies and no session, so a
-# token requirement would break it (KTD5, tests/test_crud_operations.sh).
-CSRF_PROTECTED_ENDPOINTS = frozenset({'new_item', 'edit_item', 'remove_item'})
+# token requirement would break it (KTD5, tests/test_crud_operations.sh). That
+# exemption is now enforced rather than assumed -- the sign-in gate below only
+# lets those routes answer a caller on the machine itself.
+CSRF_PROTECTED_ENDPOINTS = frozenset(
+    {'new_item', 'edit_item', 'remove_item', 'sign_in', 'sign_out'}
+)
 
 
 def csrf_token():
     """The session's CSRF token, minted lazily on first use.
 
-    The app has no login, so there is no session to steal -- which is exactly
-    why a forged cross-site POST would otherwise work. A secret that only a
-    page served by this app can read is the thing standing in the way.
+    The session now carries a sign-in, so it is worth stealing in a way it was
+    not before: a forged cross-site POST rides the owner's cookie. A secret
+    that only a page served by this app can read is what stands in the way.
+    `SESSION_COOKIE_SAMESITE` narrows the same hole from the other side.
     """
     token = session.get('csrf_token')
     if not token:
@@ -70,6 +78,169 @@ def csrf_token():
 
 # Every form template emits the hidden field with {{ csrf_token() }}.
 app.jinja_env.globals['csrf_token'] = csrf_token
+
+
+# ---------------------------------------------------------------------------
+# Sign-in gate (U2)
+# ---------------------------------------------------------------------------
+
+# Host validation closes DNS rebinding. Without it any web page can point a
+# hostname at this machine, reach the app same-origin through the browser
+# running here, and sail straight through the loopback exemption below -- so
+# the exemption is only safe in this list's presence.
+#
+# Two sharp edges, both verified against the pinned Werkzeug: the comparison is
+# case-sensitive and is not folded, while browsers lowercase the Host header,
+# so gethostname() must be lowered or every request from the phone 400s with no
+# visible cause. And never write a leading dot -- '.local' becomes a suffix
+# match over every mDNS name on the network, which voids the protection.
+app.config['TRUSTED_HOSTS'] = [
+    socket.gethostname().lower(),
+    '127.0.0.1',
+    'localhost',
+    '[::1]',
+]
+
+# The password is typed about once per device, and a long session that slides
+# forward on each visit is what keeps that promise (R4). Flask validates this
+# against the cookie's signature timestamp, so it is a hard cap, not a hint.
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=365)
+
+# Reachable without signing in. 'static' must be here or the sign-in page
+# renders unstyled. Everything not named is private -- the opposite polarity to
+# the CSRF allowlist above, and deliberately so: a route added later is closed
+# until someone opens it, rather than open until someone remembers to close it.
+PUBLIC_ENDPOINTS = frozenset({'sign_in', 'static'})
+
+# A dual-stack socket reports the IPv4-mapped form, so all three mean loopback.
+LOOPBACK_ADDRESSES = frozenset({'127.0.0.1', '::1', '::ffff:127.0.0.1'})
+
+# Bounds guessing without locking the owner out, and keeps /login from being a
+# pre-authentication amplifier: the hash costs tens of milliseconds and tens of
+# megabytes, so a few concurrent posts would starve the capture screen.
+SIGN_IN_MIN_INTERVAL_SECONDS = 2
+_sign_in_last_attempt = {}
+
+
+def reset_sign_in_throttle():
+    """Forget every recorded attempt. Used by tests and after a sign-in."""
+    _sign_in_last_attempt.clear()
+
+
+def _request_is_from_this_machine():
+    """True when the caller is on the machine itself.
+
+    Read `request.remote_addr` and nothing else. `request.access_route` hands
+    back the caller's own X-Forwarded-For header verbatim, so trusting it would
+    give the exemption to anyone who sends one; Waitress is started without
+    `trusted_proxy` for the same reason.
+    """
+    return request.remote_addr in LOOPBACK_ADDRESSES
+
+
+def _session_is_signed_in():
+    """True when this session is signed in and its epoch is still current.
+
+    The epoch is how a lost phone is revoked: a signed cookie cannot be taken
+    back server-side, so bumping the stored epoch retires every session at once
+    without rotating the signing key and logging the laptop out too.
+    """
+    if not session.get('signed_in'):
+        return False
+    stored = auth.load_secrets(app.instance_path)
+    if not stored:
+        return False
+    return session.get('session_epoch') == stored.get('session_epoch')
+
+
+@app.before_request
+def require_login():
+    """Deny by default; only the exemptions above get through.
+
+    Registered before the CSRF hook (KTD2) so a lapsed session meets the
+    sign-in page rather than a bare 400 it cannot act on.
+
+    Returning None when `request.endpoint` is None is load-bearing, not
+    laziness. Flask catches the untrusted-host SecurityError while building the
+    URL adapter and defers it to dispatch, which runs *after* every
+    before_request handler. Answering here with our own 404 would short-circuit
+    dispatch, silently delete the rebinding protection, and still pass every
+    obvious test -- because a 404 reads as a refusal too.
+    """
+    if request.endpoint is None:
+        return None
+    if request.endpoint in PUBLIC_ENDPOINTS:
+        return None
+    if _request_is_from_this_machine():
+        return None
+    if _session_is_signed_in():
+        return None
+    return redirect(url_for('sign_in'))
+
+
+def _throttle_wait_remaining():
+    """Seconds the caller must wait, or 0 when they may try now."""
+    last = _sign_in_last_attempt.get(request.remote_addr)
+    if last is None:
+        return 0
+    elapsed = time.monotonic() - last
+    return max(0, int(round(SIGN_IN_MIN_INTERVAL_SECONDS - elapsed)))
+
+
+def _render_sign_in(error=None, status=200):
+    return render_template('login.html', error=error), status
+
+
+@app.route('/login', methods=['GET', 'POST'])
+def sign_in():
+    """The only way in from the network."""
+    stored = auth.load_secrets(app.instance_path)
+    if stored is None:
+        # Nothing to check against. Bound beyond loopback the entry point
+        # refuses to start in this state (U5); on loopback it just means a
+        # fresh checkout nobody has configured yet.
+        return _render_sign_in(
+            f'No password is set yet. Run `{auth.SETUP_COMMAND}` at the machine.',
+            503,
+        )
+    if request.method == 'GET':
+        return _render_sign_in()
+
+    wait = _throttle_wait_remaining()
+    if wait:
+        # Before the hash, not after -- the cost is the thing being bounded.
+        return _render_sign_in(
+            f'Too many attempts. Wait {wait} seconds, then try again.', 429
+        )
+    _sign_in_last_attempt[request.remote_addr] = time.monotonic()
+
+    if not auth.check_password(stored, request.form.get('password', '')):
+        # Address and outcome, never the submitted password.
+        app.logger.warning('Failed PRIMS sign-in from %s', request.remote_addr)
+        return _render_sign_in('Wrong password.', 401)
+
+    # Clear before setting the flag, to discard anything an unauthenticated
+    # caller planted in the session. (Not session fixation -- Flask's signed
+    # cookie has no server-side identifier to fix, and nobody can mint one
+    # without the key. Recording the wrong reason invites deleting the line.)
+    session.clear()
+    session['signed_in'] = True
+    session['session_epoch'] = stored.get('session_epoch', 1)
+    session.permanent = True
+    # Don't make the owner wait out the throttle they just cleared honestly.
+    reset_sign_in_throttle()
+    return redirect(url_for('home'))
+
+
+@app.route('/logout', methods=['POST'])
+def sign_out():
+    """Sign this device out. Other devices keep their sessions (R12).
+
+    POST only, and in CSRF_PROTECTED_ENDPOINTS, so an <img src="/logout"> on a
+    page the owner visits cannot end their session.
+    """
+    session.clear()
+    return redirect(url_for('sign_in'))
 
 
 @app.before_request

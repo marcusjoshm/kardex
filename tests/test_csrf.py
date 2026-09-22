@@ -235,29 +235,29 @@ def test_the_token_stays_valid_across_several_posts(client):
 
 # --- The JSON API stays exempt (KTD5 / tests/test_crud_operations.sh) -------
 
-def test_json_api_post_without_a_token_still_succeeds(client):
+def test_json_api_post_without_a_token_still_succeeds(loopback_client):
     # test_crud_operations.sh is curl: no cookies, no session, no token.
-    resp = client.post("/inventory", json={"name": "Laptop", "quantity": 1})
+    resp = loopback_client.post("/inventory", json={"name": "Laptop", "quantity": 1})
     assert resp.status_code == 201
-    assert client.get("/inventory").get_json()[0]["name"] == "Laptop"
+    assert loopback_client.get("/inventory").get_json()[0]["name"] == "Laptop"
 
 
-def test_json_category_and_location_posts_without_a_token_still_succeed(client):
-    assert client.post("/categories", json={"name": "Electronics"}).status_code == 201
-    assert client.post("/locations", json={"name": "Office"}).status_code == 201
+def test_json_category_and_location_posts_without_a_token_still_succeed(loopback_client):
+    assert loopback_client.post("/categories", json={"name": "Electronics"}).status_code == 201
+    assert loopback_client.post("/locations", json={"name": "Office"}).status_code == 201
 
 
-def test_json_api_put_and_delete_without_a_token_still_succeed(client):
-    created = client.post("/inventory", json={"name": "Laptop", "quantity": 1})
+def test_json_api_put_and_delete_without_a_token_still_succeed(loopback_client):
+    created = loopback_client.post("/inventory", json={"name": "Laptop", "quantity": 1})
     item_id = created.get_json()["id"]
 
-    assert client.put(
+    assert loopback_client.put(
         f"/inventory/{item_id}", json={"name": "Laptop", "quantity": 2}
     ).status_code == 200
-    assert client.delete(f"/inventory/{item_id}").status_code == 200
+    assert loopback_client.delete(f"/inventory/{item_id}").status_code == 200
 
 
-def test_file_upload_without_a_token_still_succeeds(client, tmp_path):
+def test_file_upload_without_a_token_still_succeeds(loopback_client, tmp_path):
     import io
 
     import app as app_module
@@ -266,7 +266,7 @@ def test_file_upload_without_a_token_still_succeeds(client, tmp_path):
     (tmp_path / "uploads").mkdir()
     app_module.app.config["UPLOAD_FOLDER"] = str(tmp_path / "uploads")
     try:
-        resp = client.post(
+        resp = loopback_client.post(
             "/upload",
             data={"file": (io.BytesIO(b"hello"), "note.txt")},
             content_type="multipart/form-data",

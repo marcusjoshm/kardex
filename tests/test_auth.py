@@ -120,3 +120,194 @@ def test_the_real_instance_directory_is_git_ignored():
     )
 
     assert result.returncode == 0, "src/instance/ is not git-ignored"
+
+
+# --- The sign-in gate (U2) --------------------------------------------------
+
+from conftest import LAN_ADDRESS, TEST_PASSWORD, csrf_token, sign_in  # noqa: E402
+
+
+def _db():
+    import db
+
+    return db
+
+
+def test_a_device_on_the_network_cannot_read_or_change_the_inventory(stranger_client):
+    """Covers AE3. Not signed in, not loopback: no read, no write."""
+    db = _db()
+    kitchen = db.create_category("Kitchen")
+    db.create_item("Pint glass", category_id=kitchen, quantity=6)
+
+    page = stranger_client.get("/")
+    listing = stranger_client.get("/inventory")
+    files = stranger_client.get("/files")
+    write = stranger_client.post("/inventory", json={"name": "Ghost", "quantity": 1})
+
+    for response in (page, listing, files, write):
+        assert response.status_code != 200
+        assert b"Pint glass" not in response.data
+    assert [i["name"] for i in db.get_all_items()] == ["Pint glass"]
+
+
+def test_the_stylesheet_is_reachable_signed_out(stranger_client):
+    """Otherwise the sign-in page renders unstyled."""
+    assert stranger_client.get("/static/style.css").status_code == 200
+
+
+def test_loopback_reaches_the_json_api_with_no_cookie_or_token(loopback_client):
+    """The curl contract: KTD5's exemption survives, but only from the machine."""
+    created = loopback_client.post("/inventory", json={"name": "Laptop", "quantity": 1})
+
+    assert created.status_code == 201
+    assert loopback_client.get("/inventory").get_json()[0]["name"] == "Laptop"
+
+
+def test_an_untrusted_host_from_loopback_is_refused_with_400(loopback_client):
+    """The gate and host validation must compose; neither proves it alone.
+
+    A rebinding page reaches the app over loopback, so the exemption would let
+    it through. Host validation is what stops it -- and it only fires because
+    the gate returns None for an unmatched endpoint instead of answering itself.
+    """
+    response = loopback_client.get("/", headers={"Host": "evil.com"})
+
+    assert response.status_code == 400
+
+
+def test_a_forwarded_for_header_does_not_buy_the_loopback_exemption(stranger_client):
+    """request.access_route would believe this; request.remote_addr must not."""
+    response = stranger_client.get(
+        "/inventory", headers={"X-Forwarded-For": "127.0.0.1"}
+    )
+
+    assert response.status_code != 200
+
+
+def test_an_unmatched_path_404s_rather_than_redirecting_to_sign_in(stranger_client):
+    """Redirecting would confirm to a scanner that a login is listening."""
+    assert stranger_client.get("/no-such-page").status_code == 404
+
+
+def test_the_right_password_signs_in_and_the_wrong_one_does_not(stranger_client):
+    good = sign_in(stranger_client)
+    assert good.status_code == 200
+
+    other = stranger_client.application.test_client()
+    other.environ_base["REMOTE_ADDR"] = LAN_ADDRESS
+    bad = other.post(
+        "/login",
+        data={
+            "username": "owner",
+            "password": "not-the-passphrase",
+            "csrf_token": csrf_token(other, "/login"),
+        },
+    )
+
+    assert bad.status_code == 401
+    assert b"Wrong password" in bad.data
+    assert other.get("/").status_code != 200
+
+
+def test_a_session_from_a_previous_epoch_is_signed_out(client):
+    import app as app_module
+    import auth
+
+    assert client.get("/").status_code == 200
+    auth.sign_out_everywhere(app_module.app.instance_path)
+
+    assert client.get("/").status_code != 200
+
+
+def test_signing_out_one_device_leaves_the_other_signed_in(client, app_client):
+    """Covers AE9."""
+    client.post("/logout", data={"csrf_token": csrf_token(client, "/item/new")})
+
+    assert client.get("/").status_code != 200
+    assert app_client.get("/").status_code == 200
+
+
+def test_sign_out_without_a_token_does_not_sign_the_owner_out(client):
+    """The CSRF allowlist is the only thing enforcing this."""
+    response = client.post("/logout", data={})
+
+    assert response.status_code == 400
+    assert client.get("/").status_code == 200
+
+
+def test_sign_out_over_get_does_not_sign_the_owner_out(client):
+    """An <img src="/logout"> must not end the session."""
+    assert client.get("/logout").status_code == 405
+    assert client.get("/").status_code == 200
+
+
+def test_the_session_identifier_changes_across_sign_in(stranger_client):
+    """The clear discards attacker-injectable pre-authentication state."""
+    before = csrf_token(stranger_client, "/login")
+    sign_in(stranger_client)
+    after = csrf_token(stranger_client, "/item/new")
+
+    assert before != after
+
+
+def test_a_second_attempt_in_quick_succession_is_refused_before_hashing(
+    stranger_client, monkeypatch
+):
+    """Bounds guessing, and stops /login being a 32MB pre-auth amplifier."""
+    import app as app_module
+
+    stranger_client.post(
+        "/login",
+        data={
+            "username": "owner",
+            "password": "wrong-but-long-enough",
+            "csrf_token": csrf_token(stranger_client, "/login"),
+        },
+    )
+
+    monkeypatch.setattr(app_module.auth, "check_password", _should_not_be_called)
+    throttled = stranger_client.post(
+        "/login",
+        data={
+            "username": "owner",
+            "password": "wrong-but-long-enough",
+            "csrf_token": csrf_token(stranger_client, "/login"),
+        },
+    )
+
+    assert throttled.status_code == 429
+    assert b"Too many" in throttled.data
+
+
+def test_a_failed_attempt_is_logged_without_the_password(stranger_client, caplog):
+    with caplog.at_level("WARNING"):
+        stranger_client.post(
+            "/login",
+            data={
+                "username": "owner",
+                "password": "hunter2-hunter2",
+                "csrf_token": csrf_token(stranger_client, "/login"),
+            },
+        )
+
+    logged = caplog.text
+    assert LAN_ADDRESS in logged
+    assert "hunter2" not in logged
+
+
+def test_the_session_survives_an_application_restart(client, tmp_path):
+    """Covers AE5. The persisted key is the whole reason this holds."""
+    import app as app_module
+    import auth
+
+    assert client.get("/").status_code == 200
+
+    # Re-reading the key is what a restart does; the cookie must still verify.
+    stored = auth.load_secrets(app_module.app.instance_path)
+    app_module.app.config["SECRET_KEY"] = stored["secret_key"]
+
+    assert client.get("/").status_code == 200
+
+
+def _should_not_be_called(*args, **kwargs):
+    raise AssertionError("password was hashed despite the throttle")

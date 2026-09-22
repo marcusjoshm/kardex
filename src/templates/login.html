@@ -1,0 +1,50 @@
+{# Standalone shell, not an extension of base.html: the shared header carries a
+   brand link and a search box that would render on a page the owner cannot use
+   yet. That means this page needs its own error surface, since base.html is the
+   only template that renders flash messages.
+
+   The read-only username field is not decoration. Password managers store
+   credential pairs and commonly refuse to save a password-only form, so without
+   it the password cannot be saved at all. It goes before the password field --
+   managers pair them positionally -- and is readonly rather than hidden,
+   because a hidden field makes some managers skip the form entirely. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sign in · PRIMS</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <header class="site-header">
+    <span class="brand">PRIMS</span>
+  </header>
+
+  <main class="content">
+    <div class="page-heading"><h1>Sign in</h1></div>
+
+    {% if error %}
+      <p class="field-error" role="alert">{{ error }}</p>
+    {% endif %}
+
+    <form class="item-form" action="{{ url_for('sign_in') }}" method="post">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+      <label for="username">User</label>
+      <input type="text" id="username" name="username" value="owner"
+             autocomplete="username" readonly tabindex="-1">
+
+      <label for="password">Password</label>
+      <input type="password" id="password" name="password"
+             autocomplete="current-password" autocapitalize="none"
+             autocorrect="off" spellcheck="false" enterkeyhint="go" required>
+      <p class="field-hint">You should only need this once on this device.</p>
+
+      <div class="form-actions">
+        <button class="btn" type="submit">Sign in</button>
+      </div>
+    </form>
+  </main>
+</body>
+</html>
