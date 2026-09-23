@@ -311,3 +311,103 @@ def test_the_session_survives_an_application_restart(client, tmp_path):
 
 def _should_not_be_called(*args, **kwargs):
     raise AssertionError("password was hashed despite the throttle")
+
+
+# --- Hardening (U6) ---------------------------------------------------------
+
+def _session_cookie_header(response):
+    for header in response.headers.getlist("Set-Cookie"):
+        if header.startswith("session="):
+            return header
+    raise AssertionError("no session cookie was set")
+
+
+def test_the_session_cookie_is_httponly_and_samesite_lax(stranger_client):
+    """SameSite=Lax is load-bearing: the JSON API is CSRF-exempt."""
+    response = stranger_client.post(
+        "/login",
+        data={
+            "username": "owner",
+            "password": TEST_PASSWORD,
+            "csrf_token": csrf_token(stranger_client, "/login"),
+        },
+    )
+    cookie = _session_cookie_header(response)
+
+    assert "HttpOnly" in cookie
+    assert "SameSite=Lax" in cookie
+
+
+def test_the_session_cookie_is_not_marked_secure(stranger_client):
+    """Secure over plain HTTP: the browser stores the cookie and never sends it,
+    so sign-in silently never completes. There is no TLS here by decision."""
+    response = stranger_client.post(
+        "/login",
+        data={
+            "username": "owner",
+            "password": TEST_PASSWORD,
+            "csrf_token": csrf_token(stranger_client, "/login"),
+        },
+    )
+
+    assert "Secure" not in _session_cookie_header(response)
+
+
+def test_responses_carry_the_basic_security_headers(client):
+    response = client.get("/")
+
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
+
+
+def _uploads(tmp_path, monkeypatch):
+    import app as app_module
+
+    folder = tmp_path / "uploads"
+    folder.mkdir()
+    monkeypatch.setitem(app_module.app.config, "UPLOAD_FOLDER", str(folder))
+    return folder
+
+
+def test_a_download_is_served_as_an_attachment(loopback_client, tmp_path, monkeypatch):
+    """An uploaded .html must not run as script on this origin."""
+    folder = _uploads(tmp_path, monkeypatch)
+    (folder / "page.txt").write_text("<script>alert(1)</script>")
+
+    response = loopback_client.get("/files/page.txt")
+
+    assert response.status_code == 200
+    assert response.headers["Content-Disposition"].startswith("attachment")
+
+
+def test_a_traversal_shaped_delete_neither_deletes_nor_fails(
+    loopback_client, tmp_path, monkeypatch
+):
+    """The safety margin used to be the router's alone, and the router changed."""
+    folder = _uploads(tmp_path, monkeypatch)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("must survive")
+
+    response = loopback_client.delete("/files/..%2Foutside.txt")
+
+    assert response.status_code in (400, 404)
+    assert outside.exists()
+
+
+def test_the_delete_route_is_safe_even_if_the_router_lets_traversal_through(
+    client, tmp_path, monkeypatch
+):
+    """Defence in depth. The router blocks this today, so the test above cannot
+    go red; calling the view directly simulates a front-end that does not."""
+    import app as app_module
+
+    folder = _uploads(tmp_path, monkeypatch)
+    outside = tmp_path / "outside.txt"
+    outside.write_text("must survive")
+
+    with app_module.app.test_request_context(method="DELETE"):
+        response = app_module.delete_file("../outside.txt")
+
+    status = response[1] if isinstance(response, tuple) else response.status_code
+    assert status in (400, 404)
+    assert outside.exists()

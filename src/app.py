@@ -113,6 +113,19 @@ app.config['TRUSTED_HOSTS'] = [
 # against the cookie's signature timestamp, so it is a hard cap, not a hint.
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=365)
 
+# Flask leaves SameSite unset. It is load-bearing here: the JSON API is exempt
+# from the CSRF token, so once a session authenticates it, a cross-site POST
+# riding the owner's cookie would write. Lax withholds the cookie on cross-site
+# writes. Not Strict -- that also withholds it when the owner follows a bookmark
+# from another app, which reads as a spurious sign-out.
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+
+# Deliberately False. Over plain HTTP a Secure cookie is stored and never sent,
+# so every request looks signed-out and sign-in silently never completes. There
+# is no TLS on the LAN by decision; flip this only if that changes.
+app.config['SESSION_COOKIE_SECURE'] = False
+
 # Reachable without signing in. 'static' must be here or the sign-in page
 # renders unstyled. Everything not named is private -- the opposite polarity to
 # the CSRF allowlist above, and deliberately so: a route added later is closed
@@ -248,6 +261,18 @@ def sign_out():
     """
     session.clear()
     return redirect(url_for('sign_in'))
+
+
+@app.after_request
+def add_security_headers(response):
+    """Two headers with no downside for a single-origin app.
+
+    nosniff stops a browser guessing an uploaded file's type and running it;
+    SAMEORIGIN stops another site framing these pages to trick a tap.
+    """
+    response.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    response.headers.setdefault('X-Frame-Options', 'SAMEORIGIN')
+    return response
 
 
 @app.errorhandler(HTTPException)
@@ -760,12 +785,23 @@ def list_files():
 
 @app.route('/files/<filename>', methods=['GET'])
 def download_file(filename):
-    return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
+    # As an attachment, so an uploaded HTML file cannot run as script on this
+    # origin -- which now carries a signed-in session worth stealing.
+    return send_from_directory(
+        app.config['UPLOAD_FOLDER'], filename, as_attachment=True
+    )
 
 
 @app.route('/files/<filename>', methods=['DELETE'])
 def delete_file(filename):
-    file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    # secure_filename, like upload_file already uses. Before this the only thing
+    # keeping '../' out was the router, and the WSGI front-end in front of that
+    # router just changed (U5). Called with the router bypassed, the old version
+    # deleted a file outside the uploads folder.
+    safe_name = secure_filename(filename)
+    if not safe_name or safe_name != filename:
+        return jsonify({'error': 'Invalid filename'}), 400
+    file_path = os.path.join(app.config['UPLOAD_FOLDER'], safe_name)
     if os.path.exists(file_path):
         os.remove(file_path)
         return jsonify({'message': 'File deleted successfully'})
