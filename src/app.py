@@ -275,6 +275,12 @@ def add_security_headers(response):
     return response
 
 
+def _render_error_page(code, heading, description):
+    return render_template(
+        'error.html', code=code, heading=heading, description=description
+    ), code
+
+
 @app.errorhandler(HTTPException)
 def render_http_error(exc):
     """Every HTTP error gets a PRIMS page with a way back (R13).
@@ -292,15 +298,7 @@ def render_http_error(exc):
     if isinstance(exc, SecurityError):
         return exc
 
-    return (
-        render_template(
-            'error.html',
-            code=exc.code,
-            heading=exc.name,
-            description=exc.description,
-        ),
-        exc.code,
-    )
+    return _render_error_page(exc.code, exc.name, exc.description)
 
 
 @app.errorhandler(Exception)
@@ -325,14 +323,10 @@ def render_unexpected_error(exc):
         raise exc
 
     app.logger.exception('Unhandled error serving %s', request.path)
-    return (
-        render_template(
-            'error.html',
-            code=500,
-            heading='Something went wrong',
-            description='The error has been logged. Nothing was changed.',
-        ),
+    return _render_error_page(
         500,
+        'Something went wrong',
+        'The error has been logged. Nothing was changed.',
     )
 
 
@@ -500,7 +494,6 @@ app.jinja_env.globals['QUANTITY_LIST_MAX'] = QUANTITY_LIST_MAX
 # all: the driver raises OverflowError from inside the INSERT. Rejecting it up
 # front turns that 500 into an ordinary form error.
 MAX_QUANTITY = 2 ** 63 - 1
-app.jinja_env.globals['MAX_QUANTITY'] = MAX_QUANTITY
 
 
 def _resolve_item_form(values):
@@ -823,11 +816,11 @@ def delete_file(filename):
     if not safe_name or safe_name != filename:
         return jsonify({'error': 'Invalid filename'}), 400
     file_path = os.path.join(app.config['UPLOAD_FOLDER'], safe_name)
-    if os.path.exists(file_path):
+    try:
         os.remove(file_path)
-        return jsonify({'message': 'File deleted successfully'})
-    else:
+    except FileNotFoundError:
         return jsonify({'error': 'File not found'}), 404
+    return jsonify({'message': 'File deleted successfully'})
 
 
 # ---------------------------------------------------------------------------
