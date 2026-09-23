@@ -5,18 +5,50 @@
 
   {# One plain form POST, no JavaScript (KTD1). The category picker lists every
      category because items may attach at any level (R3/KD2); naming a new
-     sub-category creates it under whatever is selected above (R10). #}
+     sub-category creates it under whatever is selected above (R10).
+
+     Shaped for a phone held in one hand while the other holds the thing being
+     logged (U7): the fields a capture needs come first, so name, quantity and
+     notes are on screen without scrolling. No autofocus -- on a phone it raises
+     the keyboard before the owner has chosen what to do, and their own tap is
+     what puts the microphone key where they expect it. #}
+
+  {% if error %}
+    {# Not a flash: the flash bar is green for everything, so a refusal shown
+       there reads as "saved". #}
+    <p class="field-error" role="alert">{{ error }}</p>
+  {% endif %}
+
   <form class="item-form" action="{{ action }}" method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
     <label for="name">Name</label>
-    <input type="text" id="name" name="name" value="{{ values.name }}" required autofocus>
+    <input type="text" id="name" name="name" value="{{ values.name }}" required
+           autocapitalize="words" enterkeyhint="next">
 
+    {# Quantity (KTD10). The iOS number pad has no microphone key and no way
+       back to the text keyboard, so a keyboard-only field would be the one
+       field a capture could not do by voice. A select is one tap and needs no
+       JavaScript; the text field beside it takes anything larger and wins when
+       filled. A value that fits the list is shown there on re-render; anything
+       else -- a large count, or a rejected entry -- goes back in the field so
+       the next save does not silently reset it. #}
+    {% set q = values.quantity|string %}
+    {% set in_list = q.isdigit() and q|int <= QUANTITY_LIST_MAX %}
     <label for="quantity">Quantity</label>
-    {# max is SQLite's largest storable INTEGER: anything above it cannot be
-       written at all, so the form says so rather than failing on save. #}
-    <input type="number" id="quantity" name="quantity" min="0" max="{{ MAX_QUANTITY }}" step="1"
-           value="{{ values.quantity }}" placeholder="0" inputmode="numeric">
+    <select id="quantity" name="quantity">
+      {% for n in range(QUANTITY_LIST_MAX + 1) %}
+        <option value="{{ n }}"{% if in_list and q|int == n %} selected{% endif %}>{{ n }}</option>
+      {% endfor %}
+    </select>
+    <label for="quantity_other" class="field-hint">or a larger number</label>
+    <input type="text" id="quantity_other" name="quantity_other"
+           value="{{ '' if in_list else values.quantity }}"
+           inputmode="numeric" pattern="[0-9]*" enterkeyhint="next">
+
+    <label for="notes">Notes</label>
+    {# Autocorrect left on: it tidies dictated sentences. #}
+    <textarea id="notes" name="notes" rows="3">{{ values.notes }}</textarea>
 
     <label for="category_id">Category</label>
     <select id="category_id" name="category_id">
@@ -28,16 +60,14 @@
       {% endfor %}
     </select>
 
+    {# Directly under the category picker: its hint says "the category above". #}
     <label for="new_category">New sub-category <span class="field-hint">(optional — created under the category above)</span></label>
     <input type="text" id="new_category" name="new_category" value="{{ values.new_category }}"
-           placeholder="e.g. Cookware">
+           placeholder="e.g. Cookware" autocapitalize="words" enterkeyhint="next">
 
     <label for="location">Location</label>
     <input type="text" id="location" name="location" value="{{ values.location }}"
-           placeholder="e.g. Top shelf">
-
-    <label for="notes">Notes</label>
-    <textarea id="notes" name="notes" rows="3">{{ values.notes }}</textarea>
+           placeholder="e.g. Top shelf" enterkeyhint="done">
 
     <div class="form-actions">
       <button class="btn" type="submit">{{ submit_label }}</button>

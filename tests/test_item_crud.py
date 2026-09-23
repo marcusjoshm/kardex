@@ -265,9 +265,24 @@ def test_add_with_the_largest_storable_quantity_still_saves(client):
     assert db.get_items_in_category(kitchen)[0]["quantity"] == 2**63 - 1
 
 
-def test_quantity_input_declares_the_storable_maximum(client):
-    body = _html(client.get("/item/new"))
-    assert f'max="{2**63 - 1}"' in body
+def test_an_unstorable_quantity_is_refused_visibly_on_the_form(client):
+    """Replaces a check that the input declared max="2**63-1".
+
+    That attribute only exists on type="number", and quantity is now a select
+    beside a text field (KTD10), so the browser can no longer refuse the value
+    before submit. The intent -- the form says so rather than failing on save --
+    now holds through the server check, rendered where the owner will see it.
+    """
+    db = _db()
+    response = post_form(
+        client, "/item/new", data={"name": "Rice", "quantity_other": str(2**63)}
+    )
+    body = _html(response)
+
+    assert response.status_code == 400
+    assert "cannot be larger than" in body
+    assert 'class="field-error"' in body
+    assert db.get_all_items() == []
 
 
 def test_a_failed_item_write_leaves_no_inline_category_behind(client, monkeypatch):
@@ -568,3 +583,136 @@ def test_json_api_is_untouched_by_the_form_routes(client):
     resp = client.post("/inventory", json={"name": "Mug", "category_id": None})
     assert resp.status_code == 201
     assert client.get("/inventory").get_json()[0]["name"] == "Mug"
+
+
+# --- The capture screen (U7) ------------------------------------------------
+
+def _field_order(body):
+    """The order the owner meets the item form's fields, top to bottom.
+
+    Scoped to the item form: the page header carries its own search box and
+    sign-out form, which are not part of a capture.
+    """
+    import re
+
+    form = re.search(r'<form class="item-form".*?</form>', body, re.S).group(0)
+    return re.findall(r'<(?:input|select|textarea)[^>]*\bname="(\w+)"', form)
+
+
+def test_quantity_is_set_from_a_list_without_the_keyboard(client):
+    """Covers R8. The iOS number pad has no microphone key, so the keyboard
+    cannot be the only way in; a select is one tap and needs no JavaScript."""
+    body = _html(client.get("/item/new"))
+
+    assert '<select id="quantity" name="quantity"' in body
+    assert '<option value="24"' in body
+    assert 'type="number"' not in body
+
+
+def test_a_quantity_chosen_from_the_list_is_saved(client):
+    db = _db()
+    post_form(client, "/item/new", data={"name": "Pint glass", "quantity": "6"})
+
+    assert db.get_all_items()[0]["quantity"] == 6
+
+
+def test_a_larger_quantity_comes_from_the_text_field_and_wins(client):
+    """The list covers the ordinary case; the field beside it the rest."""
+    db = _db()
+    post_form(
+        client,
+        "/item/new",
+        data={"name": "Screws", "quantity": "0", "quantity_other": "250"},
+    )
+
+    assert db.get_all_items()[0]["quantity"] == 250
+
+
+def test_a_blank_quantity_still_saves_as_zero(client):
+    """Covers R11: parity with the form as it was."""
+    db = _db()
+    post_form(client, "/item/new", data={"name": "Twine", "quantity": ""})
+
+    assert db.get_all_items()[0]["quantity"] == 0
+
+
+def test_editing_a_large_quantity_puts_it_in_the_text_field(client):
+    """Otherwise the select silently resets it to 0 and the next save loses it."""
+    db = _db()
+    item = db.create_item("Screws", category_id=None, quantity=250)
+    body = _html(client.get(f"/item/{item}/edit"))
+
+    assert 'name="quantity_other"' in body
+    assert 'value="250"' in body
+
+
+def test_the_name_field_does_not_autofocus(client):
+    """On a phone autofocus raises the keyboard before the owner has chosen
+    what to do, and the owner's own tap is what puts the mic key in reach."""
+    assert "autofocus" not in _html(client.get("/item/new"))
+
+
+def test_fields_run_in_capture_order(client):
+    """Name, quantity and notes first, so a typical capture needs no scrolling.
+    The new sub-category sits straight after the category its hint refers to."""
+    order = _field_order(_html(client.get("/item/new")))
+
+    assert order == [
+        "csrf_token",
+        "name",
+        "quantity",
+        "quantity_other",
+        "notes",
+        "category_id",
+        "new_category",
+        "location",
+    ]
+
+
+def test_the_name_field_is_shaped_for_dictation(client):
+    body = _html(client.get("/item/new"))
+
+    assert 'autocapitalize="words"' in body
+    assert 'enterkeyhint="next"' in body
+
+
+def test_a_rejected_capture_is_shown_as_an_error_not_a_success(client):
+    """The flash bar is green for everything. A rejection shown there reads as
+    'saved', and the owner walks away believing the item was written."""
+    response = post_form(
+        client, "/item/new", data={"name": "Rice", "quantity_other": "lots"}
+    )
+    body = _html(response)
+
+    assert response.status_code == 400
+    assert 'class="field-error"' in body
+    assert "whole number" in body
+    assert 'class="flashes"' not in body
+
+
+def test_one_capture_writes_exactly_one_item_and_nothing_before_it(client):
+    """Covers AE1, AE2 and R7. Rendering the form writes nothing; submitting
+    it once writes one row, even when the dictation names two things."""
+    db = _db()
+    client.get("/item/new")
+    assert db.get_all_items() == []
+
+    post_form(
+        client,
+        "/item/new",
+        data={"name": "three pint glasses and a mason jar", "quantity": "3"},
+    )
+
+    items = db.get_all_items()
+    assert len(items) == 1
+    assert items[0]["name"] == "three pint glasses and a mason jar"
+
+
+def test_a_capture_with_no_category_lands_in_the_uncategorised_view(client):
+    """Covers AE6 and R10."""
+    db = _db()
+    post_form(client, "/item/new", data={"name": "Mystery cable", "quantity": "1"})
+
+    assert "Mystery cable" in _html(client.get("/uncategorised"))
+    item = db.get_all_items()[0]
+    assert item["category_id"] is None

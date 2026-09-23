@@ -475,8 +475,25 @@ def _category_choices():
 
 
 def _submitted_item_form():
-    """The raw, stripped form values, kept so a rejected form can be re-rendered."""
-    return {key: request.form.get(key, '').strip() for key in BLANK_ITEM_FORM}
+    """The raw, stripped form values, kept so a rejected form can be re-rendered.
+
+    Quantity arrives in two fields (KTD10): a select for the ordinary case and a
+    text field for anything larger, which wins when filled. They are merged
+    back into one `quantity` here, so everything downstream -- validation, the
+    save, the re-render -- sees exactly what the old single field sent (R11).
+    """
+    values = {key: request.form.get(key, '').strip() for key in BLANK_ITEM_FORM}
+    larger = request.form.get('quantity_other', '').strip()
+    if larger:
+        values['quantity'] = larger
+    return values
+
+
+# The quantity select runs 0 to this; anything larger goes in the text field.
+# Household quantities are small, so the list covers the ordinary capture and
+# nothing needs the keyboard -- the iOS number pad has no microphone key.
+QUANTITY_LIST_MAX = 24
+app.jinja_env.globals['QUANTITY_LIST_MAX'] = QUANTITY_LIST_MAX
 
 
 # SQLite stores an INTEGER in 64 bits, so a larger number cannot be written at
@@ -563,7 +580,10 @@ def _save_item_form(values, save):
         raise
 
 
-def _render_item_form(values, heading, action, submit_label, status=200):
+def _render_item_form(values, heading, action, submit_label, status=200, error=None):
+    # A rejection is passed in and rendered as a field error rather than
+    # flashed: the flash bar is styled green for everything, so a refusal shown
+    # there reads as "saved" and the owner walks away with nothing written.
     return render_template(
         'item_form.html',
         values=values,
@@ -571,6 +591,7 @@ def _render_item_form(values, heading, action, submit_label, status=200):
         heading=heading,
         action=action,
         submit_label=submit_label,
+        error=error,
     ), status
 
 
@@ -581,9 +602,9 @@ def new_item():
         values = _submitted_item_form()
         item_id, error = _save_item_form(values, lambda fields: db.create_item(**fields))
         if error:
-            flash(error)
             return _render_item_form(
-                values, 'Add item', url_for('new_item'), 'Save item', status=400
+                values, 'Add item', url_for('new_item'), 'Save item',
+                status=400, error=error,
             )
         flash(f"Added {values['name']}.")
         return redirect(url_for('item_page', item_id=item_id))
@@ -608,9 +629,9 @@ def edit_item(item_id):
             values, lambda fields: db.update_item(item_id, **fields)
         )
         if error:
-            flash(error)
             return _render_item_form(
-                values, 'Edit item', action, 'Save changes', status=400
+                values, 'Edit item', action, 'Save changes',
+                status=400, error=error,
             )
         flash(f"Saved {values['name']}.")
         return redirect(url_for('item_page', item_id=item_id))
