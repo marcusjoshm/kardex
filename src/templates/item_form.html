@@ -29,21 +29,27 @@
     {# Quantity (KTD10). The iOS number pad has no microphone key and no way
        back to the text keyboard, so a keyboard-only field would be the one
        field a capture could not do by voice. A select is one tap and needs no
-       JavaScript; the text field beside it takes anything larger and wins when
-       filled. A value that fits the list is shown there on re-render; anything
-       else -- a large count, or a rejected entry -- goes back in the field so
-       the next save does not silently reset it. #}
+       JavaScript; its last option, "more…", hands the count to the text field
+       beside it, which is read only when "more…" is chosen. Any other choice
+       wins, so a stale number left in the field cannot override a smaller pick.
+       A value that fits the list is shown there on re-render; anything else --
+       a large count, or a rejected entry -- selects "more…" and goes back in
+       the field so the next save does not silently reset it. A bare "more" is
+       "more…" chosen with the field left empty: it re-renders as that, with
+       the field still empty. #}
     {% set q = values.quantity|string %}
     {% set in_list = q.isdigit() and q|int <= QUANTITY_LIST_MAX %}
+    {% set more = q != '' and not in_list %}
     <label for="quantity">Quantity</label>
     <select id="quantity" name="quantity">
       {% for n in range(QUANTITY_LIST_MAX + 1) %}
         <option value="{{ n }}"{% if in_list and q|int == n %} selected{% endif %}>{{ n }}</option>
       {% endfor %}
+      <option value="{{ QUANTITY_MORE }}"{% if more %} selected{% endif %}>more…</option>
     </select>
-    <label for="quantity_other" class="field-hint">or a larger number</label>
+    <label for="quantity_other" class="field-hint">larger number (choose “more…” above)</label>
     <input type="text" id="quantity_other" name="quantity_other"
-           value="{{ '' if in_list else values.quantity }}"
+           value="{{ values.quantity if more and q != QUANTITY_MORE else '' }}"
            inputmode="numeric" pattern="[0-9]*" enterkeyhint="next">
 
     <label for="notes">Notes</label>

@@ -482,13 +482,20 @@ def _submitted_item_form():
     """The raw, stripped form values, kept so a rejected form can be re-rendered.
 
     Quantity arrives in two fields (KTD10): a select for the ordinary case and a
-    text field for anything larger, which wins when filled. They are merged
-    back into one `quantity` here, so everything downstream -- validation, the
-    save, the re-render -- sees exactly what the old single field sent (R11).
+    text field for anything larger. They are merged back into one `quantity`
+    here, so everything downstream -- validation, the save, the re-render --
+    sees exactly what the old single field sent (R11).
+
+    The text field is read only when the select says "more": any other choice
+    wins. Editing a large count pre-fills the field, so if a filled field won
+    instead, picking a smaller number would be dropped without a word and the
+    page would still say "Saved". A post that sends only `quantity` -- the old
+    single field -- is unaffected. "more" with the field left empty stays
+    "more", for _resolve_item_form to refuse rather than save as 0.
     """
     values = {key: request.form.get(key, '').strip() for key in BLANK_ITEM_FORM}
     larger = request.form.get('quantity_other', '').strip()
-    if larger:
+    if values['quantity'] == QUANTITY_MORE and larger:
         values['quantity'] = larger
     return values
 
@@ -498,6 +505,10 @@ def _submitted_item_form():
 # nothing needs the keyboard -- the iOS number pad has no microphone key.
 QUANTITY_LIST_MAX = 24
 app.jinja_env.globals['QUANTITY_LIST_MAX'] = QUANTITY_LIST_MAX
+
+# The select's last option: "the number is in the text field".
+QUANTITY_MORE = 'more'
+app.jinja_env.globals['QUANTITY_MORE'] = QUANTITY_MORE
 
 
 # SQLite stores an INTEGER in 64 bits, so a larger number cannot be written at
@@ -521,6 +532,11 @@ def _resolve_item_form(values):
     """
     if not values['name']:
         return None, None, 'Item name is required.'
+
+    if values['quantity'] == QUANTITY_MORE:
+        # "more…" chosen, but the number beside it left empty. Saving 0 would
+        # quietly lose the count the owner meant to type.
+        return None, None, 'Enter the larger quantity, or pick one from the list.'
 
     try:
         quantity = int(values['quantity'] or 0)

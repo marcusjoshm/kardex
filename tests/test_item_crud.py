@@ -275,7 +275,9 @@ def test_an_unstorable_quantity_is_refused_visibly_on_the_form(client):
     """
     db = _db()
     response = post_form(
-        client, "/item/new", data={"name": "Rice", "quantity_other": str(2**63)}
+        client,
+        "/item/new",
+        data={"name": "Rice", "quantity": "more", "quantity_other": str(2**63)},
     )
     body = _html(response)
 
@@ -395,7 +397,9 @@ def test_edit_form_prefills_every_field(client):
     body = _html(resp)
     assert resp.status_code == 200
     assert 'value="Pint glass"' in body
-    assert 'value="6"' in body
+    # The select renders an <option value="6"> for every item, so only the
+    # selected marker shows this item's quantity was prefilled.
+    assert '<option value="6" selected>' in body
     assert 'value="Top shelf"' in body
     assert "Two are chipped" in body
     assert f'value="{glassware}" selected' in body
@@ -622,7 +626,7 @@ def test_a_larger_quantity_comes_from_the_text_field_and_wins(client):
     post_form(
         client,
         "/item/new",
-        data={"name": "Screws", "quantity": "0", "quantity_other": "250"},
+        data={"name": "Screws", "quantity": "more", "quantity_other": "250"},
     )
 
     assert db.get_all_items()[0]["quantity"] == 250
@@ -644,6 +648,88 @@ def test_editing_a_large_quantity_puts_it_in_the_text_field(client):
 
     assert 'name="quantity_other"' in body
     assert 'value="250"' in body
+
+
+def _quantity_other_value(body):
+    """What the rendered "larger number" field is pre-filled with."""
+    import re
+
+    return re.search(
+        r'<input[^>]*\bname="quantity_other"[^>]*\bvalue="([^"]*)"', body, re.S
+    ).group(1)
+
+
+def test_picking_a_smaller_quantity_beats_a_stale_larger_one(client):
+    """Editing a large count pre-fills the text field. When the owner then
+    picks a smaller number from the list, the pick is what gets saved -- not
+    the leftover number, silently, under a "Saved" message."""
+    db = _db()
+    item = db.create_item("Screws", category_id=None, quantity=250)
+
+    resp = post_form(
+        client,
+        f"/item/{item}/edit",
+        data={"name": "Screws", "quantity": "5", "quantity_other": "250"},
+    )
+
+    assert resp.status_code == 302
+    assert db.get_item(item)["quantity"] == 5
+
+
+def test_choosing_more_saves_the_number_in_the_text_field(client):
+    db = _db()
+    item = db.create_item("Screws", category_id=None, quantity=7)
+
+    post_form(
+        client,
+        f"/item/{item}/edit",
+        data={"name": "Screws", "quantity": "more", "quantity_other": "250"},
+    )
+
+    assert db.get_item(item)["quantity"] == 250
+
+
+def test_choosing_more_with_no_number_is_refused_visibly(client):
+    """Not a silent 0: the owner picked "more…" meaning to type a count."""
+    db = _db()
+    response = post_form(
+        client,
+        "/item/new",
+        data={"name": "Screws", "quantity": "more", "quantity_other": ""},
+    )
+    body = _html(response)
+
+    assert response.status_code == 400
+    assert 'class="field-error"' in body
+    assert "Enter the larger quantity, or pick one from the list." in body
+    assert db.get_all_items() == []
+    # Shown back as it was chosen: "more…" still picked, the field still empty.
+    assert '<option value="more" selected>' in body
+    assert _quantity_other_value(body) == ""
+
+
+def test_the_edit_form_shows_a_large_quantity_under_more(client):
+    db = _db()
+    large = db.create_item("Screws", category_id=None, quantity=250)
+    small = db.create_item("Hooks", category_id=None, quantity=7)
+
+    body = _html(client.get(f"/item/{large}/edit"))
+    assert '<option value="more" selected>' in body
+    assert _quantity_other_value(body) == "250"
+
+    body = _html(client.get(f"/item/{small}/edit"))
+    assert '<option value="7" selected>' in body
+    assert '<option value="more" selected>' not in body
+    assert _quantity_other_value(body) == ""
+
+
+def test_a_post_with_only_the_old_quantity_field_still_saves_it(client):
+    """Covers R11: a client that sends one `quantity`, as the old single field
+    did, is not required to know about "more"."""
+    db = _db()
+    post_form(client, "/item/new", data={"name": "Screws", "quantity": "30"})
+
+    assert db.get_all_items()[0]["quantity"] == 30
 
 
 def test_the_name_field_does_not_autofocus(client):
@@ -680,7 +766,9 @@ def test_a_rejected_capture_is_shown_as_an_error_not_a_success(client):
     """The flash bar is green for everything. A rejection shown there reads as
     'saved', and the owner walks away believing the item was written."""
     response = post_form(
-        client, "/item/new", data={"name": "Rice", "quantity_other": "lots"}
+        client,
+        "/item/new",
+        data={"name": "Rice", "quantity": "more", "quantity_other": "lots"},
     )
     body = _html(response)
 
