@@ -33,27 +33,39 @@ top-level name; a fresh one allows it. No data loss, and the user sees a normal
 validation message. Removing it needs a full table rebuild (create/copy/drop/
 rename with foreign keys disabled), which would put the preserved rows at risk.
 
-## Pre-existing, untouched by this branch
+## Pre-existing at the time of this review
 
-**`app.run(debug=True)`** ships the Werkzeug interactive debugger
-(`src/app.py`, bottom). Predates this work. It also amplifies any unhandled
-500: the debugger renders a console rather than a plain error page.
+The three entries below were accepted partly because the app only answered on
+`127.0.0.1`. `feat/phone-capture-logging` put it on the home network, which
+withdrew that reason, so each was revisited there.
 
-**`DELETE /files/<filename>`** joins the raw URL segment onto the upload path
-without `secure_filename`, unlike `upload_file`. Probed against Werkzeug 3.1.8:
-`..%2f..%2f` variants all 404 at routing, so it is not exploitable as pinned -
-but the safety margin belongs entirely to the router. A different WSGI
-front-end, or changing the converter to `<path:filename>`, would reopen it.
+**`app.run(debug=True)` - fixed for the network.** The network path now serves
+through Waitress with debug off (`main()` in `src/app.py`), and every error
+lands on a PRIMS page rather than a console. The loopback-only development path
+still runs the debugger, which is reachable only from the machine itself;
+Werkzeug 3.0.3+ also refuses debugger requests carrying a non-local Host.
 
-**`POST /upload` has no CSRF token.** The new page routes are protected; the
-pre-existing upload endpoint is deliberately exempt so the curl script keeps
-working. A hostile page could drop an allowed-extension file into `uploads/`
-and overwrite a same-named file.
+**`DELETE /files/<filename>` - fixed.** It now runs `secure_filename` and
+refuses any name that changes under it. The margin had belonged entirely to
+the router, and the WSGI front-end in front of that router changed. Called with
+the router bypassed, the old version returned 200 and deleted a file outside
+`uploads/`; `tests/test_auth.py` pins the fix both through the router and past
+it.
+
+**`POST /upload` has no CSRF token - narrowed, still open.** It now answers
+only a caller on the machine itself, so nothing on the network can reach it.
+It is still writable by any web page the owner's own browser loads on this
+machine: a multipart POST is CORS-simple, needs no preflight, and carries no
+token. The JSON API does not share this - `request.get_json()` rejects the
+CORS-simple content types, so a cross-site page cannot write to it.
 
 ## Known test gaps
 
-- The file-management endpoints (`/upload`, `/files`, `GET`/`DELETE
-  /files/<name>`) have no pytest coverage at all.
+- The file-management endpoints are covered: upload by
+  `tests/test_csrf.py::test_file_upload_without_a_token_still_succeeds`
+  (which predates this entry, so the entry was already wrong when written),
+  and download and delete by `tests/test_auth.py`. `GET /files` is covered
+  only as a refusal to a signed-out device.
 - `tests/test_crud_operations.sh` asserts nothing - it prints responses. It
   cannot catch a JSON API regression, which is how three routes began
   returning 500 while the suite stayed green.
