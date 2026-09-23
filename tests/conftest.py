@@ -9,11 +9,22 @@ this a `require_login` that did nothing would leave the whole suite green and
 prove nothing. Loopback is opt-in through `loopback_client`, which exists
 precisely to exercise the exemption.
 """
+import atexit
 import os
 import re
+import shutil
 import sys
+import tempfile
 
 import pytest
+
+# Before anything imports app or auth: importing app reads the secrets file in
+# the default instance folder, and the suite must never touch the real one.
+# Set unconditionally, so an override exported in the owner's shell cannot
+# point the suite back at it either.
+_SESSION_INSTANCE_ROOT = tempfile.mkdtemp(prefix="prims-tests-")
+atexit.register(shutil.rmtree, _SESSION_INSTANCE_ROOT, ignore_errors=True)
+os.environ["PRIMS_INSTANCE_PATH"] = os.path.join(_SESSION_INSTANCE_ROOT, "instance")
 
 SRC = os.path.join(os.path.dirname(__file__), "..", "src")
 if SRC not in sys.path:

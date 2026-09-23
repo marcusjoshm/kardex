@@ -6,12 +6,16 @@ session epoch that makes a lost phone revocable without rotating the key.
 """
 import json
 import os
+import runpy
 import stat
 import subprocess
+import sys
 
 import pytest
 
 import auth
+
+SRC_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 
 
 @pytest.fixture
@@ -96,6 +100,63 @@ def test_the_secrets_file_is_readable_only_by_its_owner(instance):
     assert stat.S_IMODE(mode) == 0o600
 
 
+def _read(path):
+    with open(path) as handle:
+        return handle.read()
+
+
+def test_a_write_leaves_nothing_beside_the_secrets_file(instance):
+    """The write goes through a temporary sibling; no copy of the hash may be
+    left lying next to the real file, and the result is still owner-only."""
+    auth.init_secrets(instance, "a-long-enough-passphrase")
+    auth.sign_out_everywhere(instance)
+
+    assert os.listdir(instance) == [auth.SECRETS_FILENAME]
+    mode = os.stat(auth.secrets_path(instance)).st_mode
+    assert stat.S_IMODE(mode) == 0o600
+
+
+def test_a_reader_during_a_write_sees_the_old_file_whole(instance, monkeypatch):
+    """The server reads this file on every request from the network, and
+    --sign-out-everywhere runs while it serves. Truncating in place let a
+    request catch an empty file and fail mid-revocation."""
+    before = auth.init_secrets(instance, "a-long-enough-passphrase")
+    seen = []
+    real_fsync = os.fsync
+
+    def fsync_then_read(descriptor):
+        real_fsync(descriptor)
+        # The new contents are written and flushed but not yet in place.
+        seen.append(auth.load_secrets(instance))
+
+    monkeypatch.setattr(auth.os, "fsync", fsync_then_read)
+    auth.sign_out_everywhere(instance)
+
+    assert seen == [before]
+    assert auth.load_secrets(instance)["session_epoch"] == before["session_epoch"] + 1
+
+
+def test_a_write_that_fails_midway_leaves_the_previous_file_intact(
+    instance, monkeypatch
+):
+    """A full disk mid-write must not destroy the key and hash: losing them
+    signs every device out and stops PRIMS starting on the network."""
+    auth.init_secrets(instance, "a-long-enough-passphrase")
+    path = auth.secrets_path(instance)
+    original = _read(path)
+
+    def torn_dump(data, handle, **kwargs):
+        handle.write('{"secret_key": "half')
+        raise OSError("No space left on device")
+
+    monkeypatch.setattr(auth.json, "dump", torn_dump)
+    with pytest.raises(OSError):
+        auth.sign_out_everywhere(instance)
+
+    assert _read(path) == original
+    assert os.listdir(instance) == [auth.SECRETS_FILENAME]
+
+
 def test_a_missing_secrets_file_reports_absence_rather_than_raising(instance):
     assert auth.load_secrets(instance) is None
 
@@ -120,6 +181,181 @@ def test_the_real_instance_directory_is_git_ignored():
     )
 
     assert result.returncode == 0, "src/instance/ is not git-ignored"
+
+
+# --- The setup command, `python src/auth.py` ---------------------------------
+
+def test_the_setup_command_sets_the_password(instance, monkeypatch):
+    monkeypatch.setattr(auth, "_prompt_for_password", lambda: "a-long-enough-passphrase")
+
+    code = auth.main([], instance_path=instance)
+
+    assert code == 0
+    assert auth.check_password(auth.load_secrets(instance), "a-long-enough-passphrase")
+
+
+def test_the_setup_command_refuses_a_short_password_and_writes_nothing(
+    instance, monkeypatch, capsys
+):
+    monkeypatch.setattr(auth, "_prompt_for_password", lambda: "short")
+
+    code = auth.main([], instance_path=instance)
+
+    assert code == 1
+    assert auth.load_secrets(instance) is None
+    assert str(auth.MIN_PASSWORD_LENGTH) in capsys.readouterr().err
+
+
+def test_the_setup_command_refuses_mismatched_entries_and_writes_nothing(
+    instance, monkeypatch
+):
+    """Asking twice is what stops a typo becoming a password nobody knows."""
+    entries = iter(["a-long-enough-passphrase", "a-long-enough-passphrasf"])
+    monkeypatch.setattr(auth.getpass, "getpass", lambda prompt="": next(entries))
+
+    code = auth.main([], instance_path=instance)
+
+    assert code == 1
+    assert auth.load_secrets(instance) is None
+
+
+def test_signing_out_everywhere_before_any_password_is_set_exits_2(instance, capsys):
+    """The likely first-run slip. It must name the setup command and exit 2,
+    at the moment the owner is trying to recover from a lost phone."""
+    code = auth.main(["--sign-out-everywhere"], instance_path=instance)
+
+    assert code == 2
+    assert auth.SETUP_COMMAND in capsys.readouterr().err
+    assert auth.load_secrets(instance) is None
+
+
+def test_signing_out_everywhere_from_the_command_line_bumps_the_epoch(
+    instance, monkeypatch
+):
+    """No instance_path given: main() finds the folder itself, as the real
+    command does -- from auth.DEFAULT_INSTANCE_PATH, not by importing app,
+    which reads this same file and so could fail on the state being fixed."""
+    before = auth.init_secrets(instance, "a-long-enough-passphrase")
+    monkeypatch.setattr(auth, "DEFAULT_INSTANCE_PATH", instance)
+    monkeypatch.setitem(sys.modules, "app", None)  # any `import app` now raises
+
+    code = auth.main(["--sign-out-everywhere"])
+
+    assert code == 0
+    assert auth.load_secrets(instance)["session_epoch"] == before["session_epoch"] + 1
+
+
+# --- Both entry points, one secrets file ------------------------------------
+
+def _run_isolated(tmp_path, args):
+    """Run Python in a fresh interpreter that can only see throwaway files.
+
+    A fresh process is the honest test of anything that happens at import: in
+    this one, app was imported long before any test corrupted a file. The
+    working directory is a separate folder under tmp_path, so the uploads
+    folder app.py creates at import lands there, and Flask's fallback to the
+    working directory cannot coincide with the instance folder by accident.
+    """
+    cwd = tmp_path / "cwd"
+    cwd.mkdir(exist_ok=True)
+    env = dict(os.environ)
+    env["PRIMS_INSTANCE_PATH"] = str(tmp_path / "instance")
+    env["PRIMS_DB"] = str(tmp_path / "test.db")
+    env["PYTHONPATH"] = SRC_DIR
+    return subprocess.run(
+        [sys.executable, *args],
+        cwd=cwd,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+    )
+
+
+def _corrupt_secrets(tmp_path):
+    instance = str(tmp_path / "instance")
+    auth.init_secrets(instance, "a-long-enough-passphrase")
+    path = auth.secrets_path(instance)
+    with open(path, "w") as handle:
+        handle.write("{ not json")
+    return path
+
+
+def test_running_app_as_a_script_reads_the_folder_the_setup_command_writes(
+    tmp_path,
+):
+    """Run as `python src/app.py`, app's import name is __main__; Flask then put
+    the instance folder under the working directory while auth.py wrote to
+    src/instance, and the server refused to start with "no password is set"
+    right after one was set. run_path with any name but __main__ puts Flask in
+    the same position without running main(), which would bind a socket."""
+    probe = (
+        "import json, runpy, app, auth\n"
+        f"script = runpy.run_path({os.path.join(SRC_DIR, 'app.py')!r},"
+        " run_name='prims_as_a_script')\n"
+        "print(json.dumps([app.app.instance_path, script['app'].instance_path,"
+        " auth.DEFAULT_INSTANCE_PATH]))\n"
+    )
+
+    result = _run_isolated(tmp_path, ["-c", probe])
+
+    assert result.returncode == 0, result.stderr
+    imported, as_script, setup = json.loads(result.stdout.strip().splitlines()[-1])
+    assert imported == as_script == setup == str(tmp_path / "instance")
+
+
+def test_the_default_instance_folder_is_src_instance(tmp_path, monkeypatch):
+    """Where the README and the git-ignore test say the secrets live, whatever
+    the working directory -- depending on it is what split the two commands.
+    Only the path is computed here; nothing in the real folder is read."""
+    monkeypatch.delenv("PRIMS_INSTANCE_PATH", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    fresh = runpy.run_path(auth.__file__, run_name="prims_auth_probe")
+
+    assert fresh["DEFAULT_INSTANCE_PATH"] == os.path.join(SRC_DIR, "instance")
+
+
+def test_a_cold_start_on_a_corrupt_secrets_file_refuses_rather_than_tracing(
+    tmp_path,
+):
+    """Corrupt first, then import: the order a real start after a crash has.
+
+    test_startup's version corrupts the file after this process imported app,
+    so it never sees the import. The signing key is read at import, and a bare
+    SecretsError there pre-empted main()'s named refusal. The injected serve
+    means a regression that got past the refusal still binds nothing.
+    """
+    path = _corrupt_secrets(tmp_path)
+    probe = (
+        "import sys, app\n"
+        "sys.exit(app.main(['--host', '0.0.0.0'], serve=lambda **kwargs: None))\n"
+    )
+
+    result = _run_isolated(tmp_path, ["-c", probe])
+
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    # Refused over this file, not for some other reason such as a missing one.
+    assert path in result.stderr
+    assert auth.SETUP_COMMAND in result.stderr
+    assert _read(path) == "{ not json"  # refused, not silently replaced
+
+
+def test_signing_out_everywhere_on_a_corrupt_file_is_a_named_error(tmp_path):
+    """The recovery command must survive the state it exists to recover from.
+    It used to import app to find the folder, and that import crashed first."""
+    path = _corrupt_secrets(tmp_path)
+
+    result = _run_isolated(
+        tmp_path, [os.path.join(SRC_DIR, "auth.py"), "--sign-out-everywhere"]
+    )
+
+    assert result.returncode == 2
+    assert "Traceback" not in result.stderr
+    assert path in result.stderr
+    assert auth.SETUP_COMMAND in result.stderr
+    assert _read(path) == "{ not json"
 
 
 # --- The sign-in gate (U2) --------------------------------------------------
@@ -233,6 +469,19 @@ def test_sign_out_without_a_token_does_not_sign_the_owner_out(client):
 
     assert response.status_code == 400
     assert client.get("/").status_code == 200
+
+
+def test_sign_in_without_a_token_does_not_sign_in(stranger_client):
+    """The CSRF allowlist is the only thing enforcing this, and every other
+    POST to /login in the suite carries a valid token -- so dropping 'sign_in'
+    from the list would leave a form that looks protected and is not."""
+    csrf_token(stranger_client, "/login")  # the session has a token; the form omits it
+    response = stranger_client.post(
+        "/login", data={"username": "owner", "password": TEST_PASSWORD}
+    )
+
+    assert response.status_code == 400
+    assert stranger_client.get("/").status_code != 200
 
 
 def test_sign_out_over_get_does_not_sign_the_owner_out(client):

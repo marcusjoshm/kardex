@@ -34,6 +34,20 @@ from werkzeug.security import check_password_hash, generate_password_hash
 SECRETS_FILENAME = "secrets.json"
 SETUP_COMMAND = "python src/auth.py"
 
+# The instance folder, pinned to this file rather than left to Flask. Flask
+# derives it from the import name, and under `python src/app.py` that name is
+# __main__, which has no package to anchor to -- so it falls back to the
+# working directory and lands on <repo>/instance, while this command writes to
+# src/instance. The server would then never see the password it was given, and
+# --sign-out-everywhere would bump an epoch nobody reads. One definition, used
+# by both entry points, is what keeps them on the same file. PRIMS_INSTANCE_PATH
+# mirrors PRIMS_DB in db.py: it points tests and experiments at a throwaway
+# folder so they never touch the real secrets. Flask insists on an absolute path.
+DEFAULT_INSTANCE_PATH = os.path.abspath(
+    os.environ.get("PRIMS_INSTANCE_PATH")
+    or os.path.join(os.path.dirname(os.path.abspath(__file__)), "instance")
+)
+
 # The password is typed by hand on a phone with no autofill, which pushes hard
 # toward something short. With no lockout, its length is most of what stands
 # between the inventory and a patient guesser on the network, so the floor is
@@ -100,16 +114,38 @@ def load_secrets(instance_path):
 
 
 def _write_secrets(instance_path, data):
-    """Write the secrets file with owner-only permissions."""
+    """Write the secrets file with owner-only permissions, atomically.
+
+    The server reads this file on every request from the network, and
+    --sign-out-everywhere is meant to be run while it keeps serving. Truncating
+    in place would let a request land on an empty or half-written file and fail
+    at exactly the moment the owner is revoking a lost phone. Writing a sibling
+    and renaming it over the original means a reader sees the old file or the
+    new one, never a torn one.
+    """
     os.makedirs(instance_path, mode=0o700, exist_ok=True)
     path = secrets_path(instance_path)
+    # Same directory, so the rename cannot cross a filesystem and stays atomic.
+    temporary = f"{path}.{secrets.token_hex(8)}.tmp"
     # Create with the right mode rather than widening then narrowing, so the
-    # hash is never briefly world-readable.
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(descriptor, "w") as handle:
-        json.dump(data, handle, indent=2)
-        handle.write("\n")
-    os.chmod(path, 0o600)
+    # hash is never briefly world-readable. O_EXCL because the name is fresh:
+    # anything already there is not ours to write through.
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "w") as handle:
+            os.fchmod(handle.fileno(), 0o600)  # exactly 0o600, whatever the umask
+            json.dump(data, handle, indent=2)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(temporary, path)
+    except BaseException:
+        # The previous file is untouched; leave no stray copy of the hash.
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+        raise
     return data
 
 
@@ -181,9 +217,9 @@ def main(argv=None, instance_path=None):
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     if instance_path is None:
-        import app as app_module
-
-        instance_path = app_module.app.instance_path
+        # Not `import app`: importing it reads this same file, so a corrupt one
+        # would crash the very command that exists to recover from it.
+        instance_path = DEFAULT_INSTANCE_PATH
 
     if args.sign_out_everywhere:
         try:

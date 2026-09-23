@@ -14,7 +14,10 @@ from werkzeug.utils import secure_filename
 import auth
 import db
 
-app = Flask(__name__)
+# Pinned, not derived: run as `python src/app.py` the import name is __main__
+# and Flask would put the instance folder under the working directory, apart
+# from the one `python src/auth.py` writes. See auth.DEFAULT_INSTANCE_PATH.
+app = Flask(__name__, instance_path=auth.DEFAULT_INSTANCE_PATH)
 
 
 def _load_signing_key():
@@ -27,7 +30,13 @@ def _load_signing_key():
     runnable on loopback; refusing to start unconfigured is the entry point's
     job (U5), because the bind host is not known here at import time.
     """
-    stored = auth.load_secrets(app.instance_path)
+    try:
+        stored = auth.load_secrets(app.instance_path)
+    except auth.SecretsError:
+        # A corrupt file must not crash the import: that would pre-empt
+        # main()'s named refusal with a bare traceback. main() re-reads the
+        # file and refuses to start on it, so falling back here serves nothing.
+        stored = None
     if stored and stored.get('secret_key'):
         return stored['secret_key']
     return os.environ.get('PRIMS_SECRET_KEY') or secrets.token_hex(32)
