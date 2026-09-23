@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{# R13: no request ends on a page with no way out. The shared shell is the
+   whole point here -- it carries the link home that a bare Werkzeug page
+   lacks, which on a phone is the difference between a detour and a dead end. #}
+{% block title %}{{ code }} · PRIMS{% endblock %}
+{% block content %}
+  <div class="page-heading"><h1>{{ heading }}</h1></div>
+
+  <p class="field-error" role="alert">{{ description }}</p>
+
+  <p><a class="btn" href="{{ url_for('home') }}">Back to the inventory</a></p>
+{% endblock %}

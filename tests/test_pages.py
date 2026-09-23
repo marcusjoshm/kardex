@@ -232,3 +232,66 @@ def test_json_api_still_works(client):
     resp = client.get("/inventory")
     assert resp.status_code == 200
     assert resp.get_json() == []
+
+
+# --- Error pages (U4, R13) -------------------------------------------------
+
+def test_an_unknown_item_renders_a_prims_page_with_a_way_back(client):
+    """Covers AE10. A bare Werkzeug page is a dead end on a phone."""
+    response = client.get("/item/9999")
+    body = _html(response)
+
+    assert response.status_code == 404
+    assert 'href="/"' in body
+    assert 'name="viewport"' in body
+
+
+def test_a_missing_csrf_token_still_explains_itself(client):
+    """The handler must not swallow the description the abort() carried."""
+    response = client.post("/item/new", data={"name": "Pint glass"})
+    body = _html(response)
+
+    assert response.status_code == 400
+    assert "CSRF token" in body
+    assert 'href="/"' in body
+
+
+def test_a_method_not_allowed_lands_on_a_prims_page(client):
+    """405 is reachable today: a bookmark or back-button onto a delete URL."""
+    response = client.get("/item/1/delete")
+    body = _html(response)
+
+    assert response.status_code == 405
+    assert 'href="/"' in body
+
+
+def test_an_unsupported_media_type_lands_on_a_prims_page(loopback_client):
+    """415 is reachable today: a form-encoded POST to a JSON route."""
+    response = loopback_client.post(
+        "/inventory", data="name=x", content_type="application/x-www-form-urlencoded"
+    )
+
+    assert response.status_code == 415
+    assert 'href="/"' in _html(response)
+
+
+def test_an_unhandled_error_shows_no_console_and_no_traceback(client, monkeypatch):
+    """Covers AE4. With debug off the interactive debugger must be gone."""
+    import app as app_module
+    import db
+
+    monkeypatch.setattr(app_module.app, "debug", False)
+    monkeypatch.setitem(app_module.app.config, "PROPAGATE_EXCEPTIONS", False)
+    monkeypatch.setattr(db, "get_top_level_categories", _explode)
+
+    response = client.get("/")
+    body = _html(response)
+
+    assert response.status_code == 500
+    assert "Traceback" not in body
+    assert "console" not in body.lower()
+    assert 'href="/"' in body
+
+
+def _explode(*args, **kwargs):
+    raise RuntimeError("deliberate failure for the 500 path")

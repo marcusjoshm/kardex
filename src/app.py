@@ -8,6 +8,7 @@ import secrets
 import socket
 import time
 from datetime import timedelta
+from werkzeug.exceptions import HTTPException, SecurityError
 from werkzeug.utils import secure_filename
 
 import auth
@@ -241,6 +242,67 @@ def sign_out():
     """
     session.clear()
     return redirect(url_for('sign_in'))
+
+
+@app.errorhandler(HTTPException)
+def render_http_error(exc):
+    """Every HTTP error gets a PRIMS page with a way back (R13).
+
+    One handler rather than a list of statuses, because the list is always
+    wrong: 405 is reachable from a bookmarked delete URL, 415 from a
+    form-encoded POST to a JSON route, and 413 once a body limit exists. Each
+    was a bare Werkzeug page with no header and no link home before this.
+
+    An untrusted Host is the one case the shell cannot serve: the failure
+    happened while building the URL adapter, so `url_for` -- which every page
+    here uses -- has nothing to build against. Answer it plainly instead of
+    raising a second error out of the error handler.
+    """
+    if isinstance(exc, SecurityError):
+        return exc
+
+    return (
+        render_template(
+            'error.html',
+            code=exc.code,
+            heading=exc.name,
+            description=exc.description,
+        ),
+        exc.code,
+    )
+
+
+@app.errorhandler(Exception)
+def render_unexpected_error(exc):
+    """An unhandled exception, with the traceback kept out of the response.
+
+    Debug mode would serve the Werkzeug console here, which is remote code
+    execution for anyone who can reach the port -- the reason R2 exists. The
+    traceback goes to the log, where the owner can find it, and the visitor
+    gets a page rather than a wall of frames.
+
+    Registering this handler overrides Flask's own re-raise in testing, which
+    would quietly blind every test that asserts an exception escapes a route.
+    Honour `PROPAGATE_EXCEPTIONS` first so those keep working.
+    """
+    # Flask ships this key set to None, so a .get() default never applies --
+    # reproduce Flask's own resolution rather than inventing one.
+    propagate = app.config['PROPAGATE_EXCEPTIONS']
+    if propagate is None:
+        propagate = app.testing or app.debug
+    if propagate:
+        raise exc
+
+    app.logger.exception('Unhandled error serving %s', request.path)
+    return (
+        render_template(
+            'error.html',
+            code=500,
+            heading='Something went wrong',
+            description='The error has been logged. Nothing was changed.',
+        ),
+        500,
+    )
 
 
 @app.before_request
