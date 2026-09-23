@@ -40,6 +40,12 @@ UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
+# Unset by default, and /upload is a live route, so an arbitrarily large body
+# would be read into memory. Set here, alongside the network bind, rather than
+# later: the gap between the two is exactly when an unbounded body can reach a
+# reachable endpoint. Werkzeug refuses with 413 before reading the body.
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+
 # Allowed extensions
 ALLOWED_EXTENSIONS = {'txt', 'pdf', 'png', 'jpg', 'jpeg', 'gif'}
 
@@ -767,6 +773,92 @@ def delete_file(filename):
         return jsonify({'error': 'File not found'}), 404
 
 
-if __name__ == '__main__':
+# ---------------------------------------------------------------------------
+# Entry point (U5)
+# ---------------------------------------------------------------------------
+
+DEFAULT_HOST = '127.0.0.1'
+DEFAULT_PORT = 5000
+LOOPBACK_HOSTS = frozenset({'127.0.0.1', 'localhost', '::1'})
+
+
+def _serve_with_waitress(host, port):
+    """Production WSGI server: one process, no debugger, no dev reloader.
+
+    Flask's own documentation is explicit that the development server is not
+    for this -- "production" includes serving "privately to a single user".
+    `trusted_proxy` is deliberately left unset: there is no proxy, and setting
+    it would make X-Forwarded-For authoritative and hand the loopback exemption
+    to anyone who sends the header.
+    """
+    import waitress
+
+    waitress.serve(app, host=host, port=port)
+
+
+def main(argv=None, serve=None):
+    """Start PRIMS. Refuses to reach the network with nothing guarding it.
+
+    Run from the repository root::
+
+        python src/app.py                    # this machine only, dev server
+        python src/app.py --host 0.0.0.0     # the home network, via Waitress
+
+    The refusal is the reason this is a function rather than a bare block:
+    binding beyond loopback with no password configured would put the whole
+    inventory, readable and writable, on the network. It is decided here and
+    not at import, because the bind host is only known once arguments exist.
+    """
+    import argparse
+    import sys
+
+    parser = argparse.ArgumentParser(description='Run PRIMS.')
+    parser.add_argument(
+        '--host',
+        default=DEFAULT_HOST,
+        help='address to listen on; 0.0.0.0 reaches the home network '
+             f'(default: {DEFAULT_HOST}, this machine only)',
+    )
+    parser.add_argument('--port', type=int, default=DEFAULT_PORT)
+    args = parser.parse_args(sys.argv[1:] if argv is None else argv)
+
+    on_network = args.host not in LOOPBACK_HOSTS
+
+    try:
+        stored = auth.load_secrets(app.instance_path)
+    except auth.SecretsError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    if on_network and stored is None:
+        print(
+            f'Refusing to listen on {args.host}: no password is set, so the '
+            'whole inventory would be readable and writable by anyone on the '
+            f'network.\nRun `{auth.SETUP_COMMAND}` first.',
+            file=sys.stderr,
+        )
+        return 2
+
     db.init_db()
-    app.run(debug=True)
+
+    if on_network:
+        # Never the debugger on a reachable socket: it is remote code
+        # execution for anyone who can reach the port (R2).
+        app.debug = False
+
+    if serve is not None:
+        # Tests inject this; everything above is the real decision path.
+        serve(host=args.host, port=args.port)
+        return 0
+
+    if on_network:
+        print(f'PRIMS on http://{socket.gethostname().lower()}:{args.port}')
+        _serve_with_waitress(args.host, args.port)
+    else:
+        # Loopback-only keeps the owner's edit-reload loop.
+        app.run(host=args.host, port=args.port, debug=True)
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())
