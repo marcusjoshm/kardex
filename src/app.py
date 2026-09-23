@@ -2,6 +2,7 @@ from flask import (
     Flask, request, jsonify, send_from_directory, render_template,
     redirect, url_for, flash, abort, session,
 )
+import errno
 import hmac
 import os
 import secrets
@@ -838,6 +839,11 @@ def delete_file(filename):
 
 DEFAULT_HOST = '127.0.0.1'
 DEFAULT_PORT = 5000
+# The network path's own default. macOS's AirPlay Receiver listens on *:5000,
+# so a 0.0.0.0 bind there fails with "address in use". A loopback bind is more
+# specific and still wins, so loopback keeps 5000 -- the port
+# tests/test_crud_operations.sh curls.
+NETWORK_DEFAULT_PORT = 5050
 LOOPBACK_HOSTS = frozenset({'127.0.0.1', 'localhost', '::1'})
 
 
@@ -849,10 +855,33 @@ def _serve_with_waitress(host, port):
     `trusted_proxy` is deliberately left unset: there is no proxy, and setting
     it would make X-Forwarded-For authoritative and hand the loopback exemption
     to anyone who sends the header.
+
+    Returns the exit status for main(): 2 when the port is taken.
     """
+    import logging
+    import sys
+
     import waitress
 
-    waitress.serve(app, host=host, port=port)
+    # What waitress.serve() does first; it is how Waitress's errors get printed.
+    logging.basicConfig()
+    try:
+        server = waitress.create_server(app, host=host, port=port)
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE:
+            raise
+        print(
+            f'Cannot listen on port {port}: something else on this machine is '
+            'already using it (on macOS, the AirPlay Receiver uses 5000).\n'
+            'Pass --port to choose a different one.',
+            file=sys.stderr,
+        )
+        return 2
+    # Announced only once the bind has succeeded, so the owner is never handed
+    # an address that answers to nothing.
+    print(f'PRIMS on http://{socket.gethostname().lower()}:{port}')
+    server.run()
+    return 0
 
 
 def main(argv=None, serve=None):
@@ -861,7 +890,7 @@ def main(argv=None, serve=None):
     Run from the repository root::
 
         python src/app.py                    # this machine only, dev server
-        python src/app.py --host 0.0.0.0     # the home network, via Waitress
+        python src/app.py --host 0.0.0.0     # the home network on 5050, via Waitress
 
     The refusal is the reason this is a function rather than a bare block:
     binding beyond loopback with no password configured would put the whole
@@ -878,10 +907,18 @@ def main(argv=None, serve=None):
         help='address to listen on; 0.0.0.0 reaches the home network '
              f'(default: {DEFAULT_HOST}, this machine only)',
     )
-    parser.add_argument('--port', type=int, default=DEFAULT_PORT)
+    parser.add_argument(
+        '--port',
+        type=int,
+        default=None,
+        help=f'port to listen on (default: {DEFAULT_PORT} on this machine only, '
+             f'{NETWORK_DEFAULT_PORT} on the network)',
+    )
     args = parser.parse_args(sys.argv[1:] if argv is None else argv)
 
     on_network = args.host not in LOOPBACK_HOSTS
+    if args.port is None:
+        args.port = NETWORK_DEFAULT_PORT if on_network else DEFAULT_PORT
 
     try:
         stored = auth.load_secrets(app.instance_path)
@@ -911,8 +948,7 @@ def main(argv=None, serve=None):
         return 0
 
     if on_network:
-        print(f'PRIMS on http://{socket.gethostname().lower()}:{args.port}')
-        _serve_with_waitress(args.host, args.port)
+        return _serve_with_waitress(args.host, args.port)
     else:
         # Loopback-only keeps the owner's edit-reload loop.
         app.run(host=args.host, port=args.port, debug=True)

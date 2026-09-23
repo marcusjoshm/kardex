@@ -54,7 +54,8 @@ Run these at the machine, from the repository root.
 1. **Set a password:** `python src/auth.py`. At least 12 characters. You will
    type it about once per phone, so a long passphrase costs you nothing.
 2. **Start it on the home network:** `python src/app.py --host 0.0.0.0`. It
-   prints the address to use, like `http://eniac.local:5000`.
+   prints the address to use, like `http://eniac.local:5050`. If something
+   else is already using port 5050, pick a different one with `--port`.
 3. **Allow incoming connections** when macOS asks. It only asks the first time.
 4. **On the phone,** open that address and sign in once. Bookmark it — the
    `.local` name keeps working when the network hands the machine a new IP,
