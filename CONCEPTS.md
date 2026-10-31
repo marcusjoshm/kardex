@@ -1,79 +1,49 @@
 # Concepts
 
-Shared domain vocabulary for this project — entities, named processes, and status
-concepts with project-specific meaning. Seeded with core domain vocabulary, then
-accretes as ce-compound and ce-compound-refresh process learnings; direct edits are
-fine. Glossary only, not a spec or catch-all.
+Shared domain vocabulary for this project: entities and the words they go by.
+Glossary only, not a spec; the tables are in `SCHEMA.md`.
 
 ## Relationships
 
-An Item belongs to at most one Category and is kept at most one Location. Categories
-nest into one another without limit; Locations never nest. Categories are owned — one
-Category has one parent — while Locations are shared: many Items in unrelated
-Categories can name the same Location. Neither a Category holding anything nor a
-Location an Item still names can be deleted.
+An Item belongs to exactly one Collection, at most one Category within it, and is kept
+at most one Location. Categories nest into one another without limit; Locations never
+nest. Categories belong to their Collection, while Locations are shared: Items in
+unrelated Collections can name the same Location.
 
 ## Inventory
 
 ### Item
-One kind of thing the owner possesses, recorded with a count rather than one row per
-physical object.
+One thing the owner possesses: one row per record, movie or garment. A quantity above 1
+is only for interchangeable things, like a set of glasses.
 
-Every Item carries the same three fields whatever it is — a name, a quantity, and
-freeform notes. This uniformity is deliberate: a book's author and a record's artist
-live in the notes rather than in fields of their own, which is why search reads notes
-as well as names, and why nothing can be sorted by an attribute that only some kinds
-of thing possess. An Item may name no Category at all, in which case it is reachable
-only by search or by the view that collects such Items, since every browsing path
-descends through Categories.
-
-### Category
-A named group of Items that may also contain other Categories, nested to any depth.
-
-A Category holds sub-categories and Items at the same time — Items attach at whatever
-level the owner finds natural, not only at the bottom of the tree. Names are unique
-among siblings rather than across the whole tree, so the same name may appear under
-two different parents. A Category cannot be deleted while it still holds
-sub-categories or Items.
+Every Item carries shared fields (name, collection, category, location, quantity, notes,
+photo, timestamps) and its Collection's Attributes. Unlike the first version, where a
+record's artist lived in the notes, the artist is now a field that can be sorted on.
 
 ### Collection
-A Category with no parent — one of the top-level groupings the owner sees first.
+One of the fixed top-level groupings: records, kitchen, clothes, movies, music, gear. A
+Collection decides which Attributes an Item may have. It is a value on the Item, not a
+node in the Category tree.
 
-Collection is a position in the tree, not a separate kind of thing: every Collection
-is a Category, and a Category becomes one precisely by having no parent. The
-distinction matters because an Item attached directly to a Collection sits at the top
-level, which is different from an Item attached to no Category at all.
+### Category
+A path under a Collection, such as `jazz/hard-bop`, that nests to any depth. It is text on
+the Item, so finding a Category's Items, sub-categories included, is a prefix match.
+An Item may have no Category.
+
+### Attribute
+A field only some Collections care about (artist, label, year, format, pressing for
+records; director for movies; weight for gear), stored in the Item's `attrs` JSON. Each
+Collection has a fixed set of keys. The ones that get sorted on are also indexed columns.
 
 ### Location
-A flat label naming where an Item is kept.
-
-Locations deliberately do not nest, unlike Categories — they are a single vocabulary
-of place names shared across the whole inventory, so unrelated Items may name the same
-Location. A Location is created on first use by naming it, reused by name afterwards,
-and cannot be deleted while any Item still names it.
+A flat label naming where an Item is kept. Locations do not nest; they are one vocabulary
+of place names shared across all Collections, created on first use and reused by name.
 
 ## Access
 
-### Owner
-The one person whose inventory PRIMS holds, and its only user.
+### Peems
+The only interface. Kardex has no web app, API server or accounts; Peems runs the `kardex`
+CLI, or `sqlite3` directly, and brings in metadata from outside.
 
-There are no accounts: one password belongs to the Owner, and signing in on any
-device means proving to be the Owner. Everything the Owner can do from the machine
-running PRIMS, a signed-in phone can do as well.
-
-### Loopback exemption
-The rule that a request made from the machine running PRIMS needs no sign-in.
-
-The exemption is judged only by the address the connection actually comes from,
-never by anything a request says about itself, since such a claim costs nothing to
-forge. Because every other device must sign in, PRIMS refuses to serve beyond the
-machine until a password has been set; serving to the machine alone needs none, so
-a fresh setup always runs.
-
-### Sign-out everywhere
-Revoking every signed-in device at once — the remedy for a lost phone.
-
-Each sign-in is stamped with the current session generation, and sign-out everywhere
-advances it, so every earlier sign-in stops counting on its next request. Changing
-the password deliberately does not do this: other devices stay signed in, which is
-why a password change is not the answer to a lost phone.
+### Export
+The plain-text copy of the whole database (JSONL per Collection) kept in git for backup.
