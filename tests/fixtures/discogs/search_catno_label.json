@@ -1,0 +1,212 @@
+{
+  "pagination": {
+    "page": 1,
+    "pages": 1,
+    "per_page": 50,
+    "items": 4,
+    "urls": {}
+  },
+  "results": [
+    {
+      "country": "US",
+      "year": "1959",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album",
+        "Mono"
+      ],
+      "label": [
+        "Columbia"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100001,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": 5460,
+      "master_url": "https://api.discogs.com/masters/5460",
+      "uri": "/release/9100001-Miles-Davis-Kind-Of-Blue",
+      "catno": "CL 1355",
+      "title": "Miles Davis - Kind Of Blue",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100001",
+      "community": {
+        "want": 1033,
+        "have": 3100
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album",
+            "Mono"
+          ]
+        }
+      ]
+    },
+    {
+      "country": "US",
+      "year": "1964",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album",
+        "Mono",
+        "Repress"
+      ],
+      "label": [
+        "Columbia"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100002,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": 5460,
+      "master_url": "https://api.discogs.com/masters/5460",
+      "uri": "/release/9100002-Miles-Davis-Kind-Of-Blue",
+      "catno": "CL 1355",
+      "title": "Miles Davis - Kind Of Blue",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100002",
+      "community": {
+        "want": 600,
+        "have": 1800
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album",
+            "Mono",
+            "Repress"
+          ]
+        }
+      ]
+    },
+    {
+      "country": "Canada",
+      "year": "1959",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album",
+        "Mono"
+      ],
+      "label": [
+        "Columbia",
+        "Columbia Records Of Canada"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100005,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": 5460,
+      "master_url": "https://api.discogs.com/masters/5460",
+      "uri": "/release/9100005-Miles-Davis-Kind-Of-Blue",
+      "catno": "CL 1355",
+      "title": "Miles Davis - Kind Of Blue",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100005",
+      "community": {
+        "want": 80,
+        "have": 240
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album",
+            "Mono"
+          ]
+        }
+      ]
+    },
+    {
+      "country": "UK",
+      "year": "1961",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Compilation"
+      ],
+      "label": [
+        "Fontana (2)"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100009,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": null,
+      "master_url": "https://api.discogs.com/masters/None",
+      "uri": "/release/9100009-Various-Jazz-Sampler",
+      "catno": "CL 1355",
+      "title": "Various - Jazz Sampler",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100009",
+      "community": {
+        "want": 4,
+        "have": 12
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Compilation"
+          ]
+        }
+      ]
+    }
+  ]
+}

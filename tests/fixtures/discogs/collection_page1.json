@@ -1,0 +1,117 @@
+{
+  "pagination": {
+    "page": 1,
+    "pages": 2,
+    "per_page": 2,
+    "items": 3,
+    "urls": {}
+  },
+  "releases": [
+    {
+      "id": 9100001,
+      "instance_id": 555001,
+      "date_added": "2024-03-02T11:20:00-08:00",
+      "rating": 0,
+      "folder_id": 1,
+      "basic_information": {
+        "id": 9100001,
+        "master_id": 5460,
+        "master_url": null,
+        "resource_url": "https://api.discogs.com/releases/9100001",
+        "thumb": "",
+        "cover_image": "",
+        "title": "Kind Of Blue",
+        "year": 1959,
+        "formats": [
+          {
+            "name": "Vinyl",
+            "qty": "1",
+            "descriptions": [
+              "LP",
+              "Album"
+            ]
+          }
+        ],
+        "labels": [
+          {
+            "name": "Columbia",
+            "catno": "CL 1355",
+            "entity_type": "1",
+            "id": 1,
+            "resource_url": "https://api.discogs.com/labels/1"
+          }
+        ],
+        "artists": [
+          {
+            "name": "Miles Davis",
+            "anv": "",
+            "join": "",
+            "role": "",
+            "tracks": "",
+            "id": 23755,
+            "resource_url": "https://api.discogs.com/artists/23755"
+          }
+        ],
+        "genres": [
+          "Jazz"
+        ],
+        "styles": [
+          "Modal"
+        ]
+      }
+    },
+    {
+      "id": 9100006,
+      "instance_id": 555002,
+      "date_added": "2024-03-03T11:20:00-08:00",
+      "rating": 0,
+      "folder_id": 1,
+      "basic_information": {
+        "id": 9100006,
+        "master_id": 5460,
+        "master_url": null,
+        "resource_url": "https://api.discogs.com/releases/9100006",
+        "thumb": "",
+        "cover_image": "",
+        "title": "Kind Of Blue",
+        "year": 1959,
+        "formats": [
+          {
+            "name": "Vinyl",
+            "qty": "1",
+            "descriptions": [
+              "LP",
+              "Album"
+            ]
+          }
+        ],
+        "labels": [
+          {
+            "name": "Columbia",
+            "catno": "CS 8163",
+            "entity_type": "1",
+            "id": 1,
+            "resource_url": "https://api.discogs.com/labels/1"
+          }
+        ],
+        "artists": [
+          {
+            "name": "Miles Davis",
+            "anv": "",
+            "join": "",
+            "role": "",
+            "tracks": "",
+            "id": 23755,
+            "resource_url": "https://api.discogs.com/artists/23755"
+          }
+        ],
+        "genres": [
+          "Jazz"
+        ],
+        "styles": [
+          "Modal"
+        ]
+      }
+    }
+  ]
+}

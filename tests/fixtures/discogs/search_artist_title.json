@@ -1,0 +1,213 @@
+{
+  "pagination": {
+    "page": 1,
+    "pages": 1,
+    "per_page": 50,
+    "items": 4,
+    "urls": {}
+  },
+  "results": [
+    {
+      "country": "US",
+      "year": "1959",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album",
+        "Mono"
+      ],
+      "label": [
+        "Columbia"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100001,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": 5460,
+      "master_url": "https://api.discogs.com/masters/5460",
+      "uri": "/release/9100001-Miles-Davis-Kind-Of-Blue",
+      "catno": "CL 1355",
+      "title": "Miles Davis - Kind Of Blue",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100001",
+      "community": {
+        "want": 1033,
+        "have": 3100
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album",
+            "Mono"
+          ]
+        }
+      ]
+    },
+    {
+      "country": "US",
+      "year": "1959",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album",
+        "Stereo"
+      ],
+      "label": [
+        "Columbia"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100006,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": 5460,
+      "master_url": "https://api.discogs.com/masters/5460",
+      "uri": "/release/9100006-Miles-Davis-Kind-Of-Blue",
+      "catno": "CS 8163",
+      "title": "Miles Davis - Kind Of Blue",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100006",
+      "community": {
+        "want": 966,
+        "have": 2900
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album",
+            "Stereo"
+          ]
+        }
+      ]
+    },
+    {
+      "country": "UK",
+      "year": "1971",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album",
+        "Reissue",
+        "Stereo"
+      ],
+      "label": [
+        "CBS"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100007,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": 5460,
+      "master_url": "https://api.discogs.com/masters/5460",
+      "uri": "/release/9100007-Miles-Davis-Kind-Of-Blue",
+      "catno": "S 62066",
+      "title": "Miles Davis - Kind Of Blue",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100007",
+      "community": {
+        "want": 300,
+        "have": 900
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album",
+            "Reissue",
+            "Stereo"
+          ]
+        }
+      ]
+    },
+    {
+      "country": "Japan",
+      "year": "1982",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album",
+        "Reissue"
+      ],
+      "label": [
+        "Sony Records"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100008,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": 5460,
+      "master_url": "https://api.discogs.com/masters/5460",
+      "uri": "/release/9100008-Miles-Davis-(2)-Kind-Of-Blue",
+      "catno": "SRJL 1101",
+      "title": "Miles Davis (2) - Kind Of Blue",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100008",
+      "community": {
+        "want": 136,
+        "have": 410
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album",
+            "Reissue"
+          ]
+        }
+      ]
+    }
+  ]
+}
