@@ -1,0 +1,73 @@
+{
+  "id": 9100003,
+  "status": "Accepted",
+  "year": 1997,
+  "resource_url": "https://api.discogs.com/releases/9100003",
+  "uri": "https://www.discogs.com/release/9100003-Miles-Davis-Kind-Of-Blue",
+  "artists": [
+    {
+      "name": "Miles Davis",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 23755,
+      "resource_url": "https://api.discogs.com/artists/23755"
+    }
+  ],
+  "artists_sort": "Miles Davis",
+  "labels": [
+    {
+      "name": "Columbia",
+      "catno": "CK 64935",
+      "entity_type": "1",
+      "id": 1866,
+      "resource_url": "https://api.discogs.com/labels/1866"
+    },
+    {
+      "name": "Legacy",
+      "catno": "CK 64935",
+      "entity_type": "1",
+      "id": 31405,
+      "resource_url": "https://api.discogs.com/labels/31405"
+    }
+  ],
+  "formats": [
+    {
+      "name": "Vinyl",
+      "qty": "2",
+      "descriptions": [
+        "LP",
+        "Album",
+        "Reissue",
+        "Remastered",
+        "180 Gram"
+      ]
+    }
+  ],
+  "format_quantity": 2,
+  "master_id": 5460,
+  "title": "Kind Of Blue",
+  "country": "US",
+  "released": "1997",
+  "notes": "Remastered from the original three-track tapes.",
+  "identifiers": [
+    {
+      "type": "Barcode",
+      "value": "0 74646 49351 7"
+    },
+    {
+      "type": "Matrix / Runout",
+      "value": "CK 64935-1A"
+    }
+  ],
+  "genres": [
+    "Jazz"
+  ],
+  "styles": [
+    "Modal"
+  ],
+  "tracklist": [],
+  "images": [],
+  "thumb": ""
+}

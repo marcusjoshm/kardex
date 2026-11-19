@@ -7,7 +7,7 @@ import sqlite3
 from datetime import date, datetime, timezone
 from pathlib import Path
 
-from .schema import COLLECTIONS, GENERATED, SCHEMA
+from .schema import COLLECTIONS, GENERATED, INDEXES, SCHEMA, generated_column_sql
 
 DEFAULT_DB = Path("~/.local/share/kardex/kardex.db").expanduser()
 SORTS = {"name": "i.name COLLATE NOCASE", "id": "i.id", "added": "i.added", "updated": "i.updated"}
@@ -35,7 +35,22 @@ def connect(path: str | os.PathLike | None = None) -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(SCHEMA)
+    migrate(conn)
+    conn.executescript(INDEXES)
     return conn
+
+
+def migrate(conn: sqlite3.Connection) -> list[str]:
+    """Bring an older database up to the current schema without touching its rows: add any
+    generated column it lacks (VIRTUAL, so ALTER TABLE can add it). Returns the columns added."""
+    have = {r["name"] for r in conn.execute("PRAGMA table_xinfo(items)")}
+    added = []
+    with conn:
+        for key, (col, _) in GENERATED.items():
+            if col not in have:
+                conn.execute(f"ALTER TABLE items ADD COLUMN {generated_column_sql(key)}")
+                added.append(col)
+    return added
 
 
 def _now() -> str:

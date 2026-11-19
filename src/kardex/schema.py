@@ -2,7 +2,9 @@
 
 # attribute key -> type: "str", "int", "num" or "date"
 COLLECTIONS: dict[str, dict[str, str]] = {
-    "records": {"artist": "str", "label": "str", "year": "int", "format": "str", "pressing": "str"},
+    "records": {"artist": "str", "label": "str", "year": "int", "format": "str", "pressing": "str",
+                "catno": "str", "barcode": "str", "country": "str",
+                "discogs_release_id": "int", "discogs_instance_id": "int", "photo_back": "str"},
     "movies": {"director": "str", "year": "int", "format": "str"},
     "music": {"artist": "str", "album": "str", "year": "int", "format": "str"},
     "kitchen": {"brand": "str", "material": "str"},
@@ -16,14 +18,22 @@ GENERATED = {
     "year": ("a_year", "INTEGER"),
     "label": ("a_label", "TEXT COLLATE NOCASE"),
     "director": ("a_director", "TEXT COLLATE NOCASE"),
+    "discogs_release_id": ("a_discogs_release_id", "INTEGER"),
 }
 
+
+def generated_column_sql(key: str) -> str:
+    """The definition of one generated column. They are all VIRTUAL so that `migrate` can
+    ALTER TABLE ADD them to an existing database (SQLite cannot add a STORED one)."""
+    col, typ = GENERATED[key]
+    return f"{col} {typ} GENERATED ALWAYS AS (json_extract(attrs, '$.{key}')) VIRTUAL"
+
+
 _collections_sql = ", ".join(f"'{c}'" for c in COLLECTIONS)
-_generated_sql = ",\n".join(
-    f"    {col} {typ} GENERATED ALWAYS AS (json_extract(attrs, '$.{key}')) VIRTUAL"
-    for key, (col, typ) in GENERATED.items()
-)
-_indexes_sql = "\n".join(
+_generated_sql = ",\n".join(f"    {generated_column_sql(key)}" for key in GENERATED)
+
+# Run after `migrate`, since an older database may lack a column until then.
+INDEXES = "\n".join(
     f"CREATE INDEX IF NOT EXISTS idx_items_{col} ON items({col});" for col, _ in GENERATED.values()
 )
 
@@ -49,7 +59,6 @@ CREATE TABLE IF NOT EXISTS items (
 );
 CREATE INDEX IF NOT EXISTS idx_items_collection ON items(collection, category);
 CREATE INDEX IF NOT EXISTS idx_items_location ON items(location_id);
-{_indexes_sql}
 
 CREATE VIRTUAL TABLE IF NOT EXISTS items_fts USING fts5(
     name, notes, category, location, attrs, tokenize = 'unicode61 remove_diacritics 2'

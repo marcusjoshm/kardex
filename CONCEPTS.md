@@ -39,6 +39,17 @@ Collection has a fixed set of keys. The ones that get sorted on are also indexed
 A flat label naming where an Item is kept. Locations do not nest; they are one vocabulary
 of place names shared across all Collections, created on first use and reused by name.
 
+### Release
+A Discogs release: one specific pressing of an album (country, year, label, catalog
+number, barcode), not the album in general (Discogs calls that the master). A record Item
+links to its Release by `discogs_release_id`; several Items may share one Release when
+Joshua owns more than one copy, each with its own collection instance.
+
+### Match
+The ranked list of Releases that fit what was read off a sleeve. A match is confident
+when exactly one Release agrees on the barcode or on catalog number plus label and nothing
+ties it; otherwise it is a short list for Joshua to pick from.
+
 ## Access
 
 ### Peems

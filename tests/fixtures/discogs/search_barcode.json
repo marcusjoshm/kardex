@@ -1,0 +1,69 @@
+{
+  "pagination": {
+    "page": 1,
+    "pages": 1,
+    "per_page": 50,
+    "items": 1,
+    "urls": {}
+  },
+  "results": [
+    {
+      "country": "US",
+      "year": "1997",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album",
+        "Reissue",
+        "Remastered",
+        "180 Gram"
+      ],
+      "label": [
+        "Columbia",
+        "Legacy"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100003,
+      "barcode": [
+        "0 74646 49351 7",
+        "CK 64935"
+      ],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": 5460,
+      "master_url": "https://api.discogs.com/masters/5460",
+      "uri": "/release/9100003-Miles-Davis-Kind-Of-Blue",
+      "catno": "CK 64935",
+      "title": "Miles Davis - Kind Of Blue",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100003",
+      "community": {
+        "want": 1403,
+        "have": 4210
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album",
+            "Reissue",
+            "Remastered",
+            "180 Gram"
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,109 @@
+{
+  "pagination": {
+    "page": 1,
+    "pages": 1,
+    "per_page": 50,
+    "items": 2,
+    "urls": {}
+  },
+  "results": [
+    {
+      "country": "US",
+      "year": "1959",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album",
+        "Stereo"
+      ],
+      "label": [
+        "Columbia"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100006,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": 5460,
+      "master_url": "https://api.discogs.com/masters/5460",
+      "uri": "/release/9100006-Miles-Davis-Kind-Of-Blue",
+      "catno": "CS 8163",
+      "title": "Miles Davis - Kind Of Blue",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100006",
+      "community": {
+        "want": 966,
+        "have": 2900
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album",
+            "Stereo"
+          ]
+        }
+      ]
+    },
+    {
+      "country": "US",
+      "year": "1956",
+      "format": [
+        "Vinyl",
+        "LP",
+        "Album"
+      ],
+      "label": [
+        "Bethlehem Records"
+      ],
+      "type": "release",
+      "genre": [
+        "Jazz"
+      ],
+      "style": [
+        "Modal"
+      ],
+      "id": 9100010,
+      "barcode": [],
+      "user_data": {
+        "in_wantlist": false,
+        "in_collection": false
+      },
+      "master_id": null,
+      "master_url": "https://api.discogs.com/masters/None",
+      "uri": "/release/9100010-Johnny-Hartman-Songs",
+      "catno": "CS 8163",
+      "title": "Johnny Hartman - Songs",
+      "thumb": "",
+      "cover_image": "",
+      "resource_url": "https://api.discogs.com/releases/9100010",
+      "community": {
+        "want": 10,
+        "have": 30
+      },
+      "format_quantity": 1,
+      "formats": [
+        {
+          "name": "Vinyl",
+          "qty": "1",
+          "descriptions": [
+            "LP",
+            "Album"
+          ]
+        }
+      ]
+    }
+  ]
+}

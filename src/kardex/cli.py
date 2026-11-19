@@ -4,7 +4,7 @@ import argparse
 import json
 import sys
 
-from . import db
+from . import db, discogs
 from .export import export as run_export
 
 
@@ -67,7 +67,79 @@ def _parser() -> argparse.ArgumentParser:
 
     x = sub.add_parser("export", parents=[common], help="write the database as JSONL")
     x.add_argument("--dir", help="output folder (default: export/ in the repo, or $KARDEX_EXPORT)")
+
+    d = sub.add_parser(
+        "discogs", parents=[common], help="find a record on Discogs, add it to the collection and kardex",
+        description="Record intake through Discogs. Needs DISCOGS_TOKEN (a personal access token). "
+                    "Read the sleeve, run `match`, then `add` the release id it found.")
+    dsub = d.add_subparsers(dest="dcmd", required=True, metavar="{match,add,sync}")
+    dm = dsub.add_parser(
+        "match", parents=[common], help="find the Discogs release for what is printed on a sleeve",
+        description="Search Discogs for a vinyl release, strongest identifiers first (barcode, then "
+                    "catno+label, then artist+title), and rank candidates by how many of the given "
+                    "fields agree. Confident means exactly one candidate agrees on the barcode or on "
+                    "catno+label and no other candidate scores as high. Give any subset of the fields.")
+    dm.add_argument("--barcode", help="digits under the barcode on the back cover")
+    dm.add_argument("--catno", help="catalog number, e.g. 'CL 1355'")
+    dm.add_argument("--label", help="label name")
+    dm.add_argument("--artist"); dm.add_argument("--title", help="album title")
+    dm.add_argument("--country", help="country of the pressing, e.g. US, UK, Japan")
+    dm.add_argument("--year", type=int, help="release year")
+    dm.add_argument("--limit", type=int, default=5, help="candidates to print (default 5)")
+
+    da = dsub.add_parser(
+        "add", parents=[common], help="add a release to the Discogs collection and to kardex",
+        description="Fetch the release, add it to the Discogs collection unless it is already there, "
+                    "and add one records item with its artist, label, catno, barcode, country, year, "
+                    "format, pressing and Discogs ids. The photos are copied into $KARDEX_PHOTOS "
+                    "(default ~/.local/share/kardex/photos/) as <id>-front.<ext> and <id>-back.<ext>. "
+                    "Refuses a release kardex already has unless --copy is given.")
+    da.add_argument("release_id", type=int, metavar="RELEASE_ID", help="Discogs release id")
+    da.add_argument("--front", metavar="PATH", help="photo of the front cover")
+    da.add_argument("--back", metavar="PATH", help="photo of the back cover")
+    da.add_argument("--location"); da.add_argument("--category", help="genre path, e.g. jazz/hard-bop")
+    da.add_argument("--notes")
+    da.add_argument("--no-discogs", action="store_true", help="do not write to the Discogs collection")
+    da.add_argument("--copy", action="store_true", help="a second copy of a release kardex already has")
+
+    dsub.add_parser(
+        "sync", parents=[common], help="compare the Discogs collection with kardex (read-only)",
+        description="List what is in the Discogs collection but not in kardex, what kardex has that "
+                    "Discogs does not, and records not linked to a Discogs release. Changes nothing.")
     return p
+
+
+def _fmt_candidate(c: dict) -> str:
+    mark = " *confident*" if c["confident"] else ""
+    where = " ".join(str(x) for x in (c["country"], c["year"]) if x)
+    return (f"{c['release_id']}  {c['artist']} - {c['title']} | {c['label'] or '?'} {c['catno'] or ''}"
+            f" | {where or '?'} | {c['format']} | agrees: {', '.join(c['agrees']) or 'nothing'}{mark}")
+
+
+def _discogs(args, conn):
+    client = discogs.Client()
+    c = args.dcmd
+    if c == "match":
+        res = discogs.match(client, barcode=args.barcode, catno=args.catno, label=args.label,
+                            artist=args.artist, title=args.title, country=args.country, year=args.year,
+                            limit=args.limit)
+        head = (f"confident: {res['release_id']}" if res["confident"]
+                else f"not confident ({len(res['candidates'])} shown); searched {', '.join(res['searched'])}")
+        return res, "\n".join([head] + ([_fmt_candidate(x) for x in res["candidates"]] or ["no candidates"]))
+    if c == "add":
+        item = discogs.add(conn, client, args.release_id, front=args.front, back=args.back,
+                           location=args.location, category=args.category, notes=args.notes,
+                           no_discogs=args.no_discogs, copy=args.copy)
+        return item, _show(item)
+    res = discogs.sync(conn, client)
+    lines = [f"in Discogs, not in kardex: {len(res['discogs_only'])}"]
+    lines += [f"  {r['release_id']}  {r['artist']} - {r['title']} ({r['label'] or '?'} {r['catno'] or ''})"
+              for r in res["discogs_only"]]
+    lines.append(f"in kardex, not in Discogs: {len(res['kardex_only'])}")
+    lines += ["  " + _fmt_item(i) for i in res["kardex_only"]]
+    lines.append(f"records with no Discogs release: {len(res['unlinked'])}")
+    lines += ["  " + _fmt_item(i) for i in res["unlinked"]]
+    return res, "\n".join(lines)
 
 
 def _run(args, conn):
@@ -103,6 +175,8 @@ def _run(args, conn):
     if c == "locations":
         rows = db.locations(conn)
         return rows, "\n".join(f"{r['name']}: {r['items']}" for r in rows) or "no locations"
+    if c == "discogs":
+        return _discogs(args, conn)
     counts = run_export(conn, args.dir)
     return counts, "\n".join(f"{k}: {v}" for k, v in counts.items())
 

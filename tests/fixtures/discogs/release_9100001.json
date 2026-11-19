@@ -1,0 +1,91 @@
+{
+  "id": 9100001,
+  "status": "Accepted",
+  "year": 1959,
+  "resource_url": "https://api.discogs.com/releases/9100001",
+  "uri": "https://www.discogs.com/release/9100001-Miles-Davis-Kind-Of-Blue",
+  "artists": [
+    {
+      "name": "Miles Davis",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 23755,
+      "resource_url": "https://api.discogs.com/artists/23755"
+    }
+  ],
+  "artists_sort": "Miles Davis",
+  "labels": [
+    {
+      "name": "Columbia",
+      "catno": "CL 1355",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 1866,
+      "resource_url": "https://api.discogs.com/labels/1866"
+    }
+  ],
+  "series": [],
+  "companies": [],
+  "formats": [
+    {
+      "name": "Vinyl",
+      "qty": "1",
+      "text": "6-Eye",
+      "descriptions": [
+        "LP",
+        "Album",
+        "Mono"
+      ]
+    }
+  ],
+  "data_quality": "Correct",
+  "community": {
+    "have": 3100,
+    "want": 1030
+  },
+  "format_quantity": 1,
+  "date_added": "2009-02-11T10:12:01-08:00",
+  "date_changed": "2025-06-01T03:44:17-07:00",
+  "num_for_sale": 41,
+  "lowest_price": 150.0,
+  "master_id": 5460,
+  "master_url": "https://api.discogs.com/masters/5460",
+  "title": "Kind Of Blue",
+  "country": "US",
+  "released": "1959-08-17",
+  "released_formatted": "17 Aug 1959",
+  "notes": "First pressing. Side 1 plays slightly fast.",
+  "identifiers": [
+    {
+      "type": "Matrix / Runout",
+      "value": "XLP 47324-1A",
+      "description": "Side A"
+    },
+    {
+      "type": "Matrix / Runout",
+      "value": "XLP 47325-1A",
+      "description": "Side B"
+    }
+  ],
+  "genres": [
+    "Jazz"
+  ],
+  "styles": [
+    "Modal"
+  ],
+  "tracklist": [
+    {
+      "position": "A1",
+      "type_": "track",
+      "title": "So What",
+      "duration": "9:22"
+    }
+  ],
+  "extraartists": [],
+  "images": [],
+  "thumb": "",
+  "estimated_weight": 230,
+  "blocked_from_sale": false
+}
